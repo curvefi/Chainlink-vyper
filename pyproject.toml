@@ -1,0 +1,32 @@
+[project]
+name            = "chainlink-vyper"
+version         = "0.1.0"
+description     = "Chainlink CRE / CCIP Interfaces in Vyper"
+readme          = "README.md"
+requires-python = ">=3.12"
+
+# Requirements
+dependencies = [
+    "vyper==0.4.3",
+    "snekmate==0.1.2",
+    "titanoboa==0.2.8",
+    "web3>=7.6.0",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest-xdist>=3.6.1",
+    "mamushi",
+    "pre-commit==3.8.0",
+    "ruff==0.6.9",
+    "pytest==8.2.2",
+    "python-dotenv>=1.0.1",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+markers = [
+    "mainnet: tests that fork Ethereum mainnet",
+]

@@ -1,0 +1,114 @@
+# pragma version 0.4.3
+
+"""
+@title IWorkflowRegistry - Chainlink CRE WorkflowRegistry (query subset)
+
+@notice Read-only interface for looking up CRE workflow metadata (ID, status,
+DON family) by owner, name and/or tag. Backs on-chain resolution of a
+workflow's ID as an alternative to the gateway's flakier
+{workflowOwner, workflowName, workflowTag} HTTP selector.
+
+@dev The WorkflowRegistry is always deployed on Ethereum mainnet, regardless
+of which chain(s) the workflow itself delivers reports to — a workflow's
+`workflow.yaml` sets `deployment-registry: "onchain:ethereum-mainnet"` even
+for testnet/staging targets. Known mainnet address:
+0x4Ac54353FA4Fa961AfcC5ec4B118596d3305E7e5
+
+@license Copyright (c) Curve.Fi, 2026 - all rights reserved
+
+@author curve.fi
+
+@custom:security security@curve.fi
+"""
+
+MAX_WORKFLOW_QUERY_RESULTS: constant(uint256) = 50
+
+MAX_NAME_SIZE: constant(uint256) = 128
+MAX_URL_SIZE: constant(uint256) = 256
+MAX_DON_FAMILY_SIZE: constant(uint256) = 64
+MAX_ATTRIBUTES_SIZE: constant(uint256) = 1024
+
+
+struct WorkflowMetadataView:
+    workflow_id: bytes32
+    owner: address
+    created_at: uint64
+    status: uint8
+    workflow_name: String[MAX_NAME_SIZE]
+    binary_url: String[MAX_URL_SIZE]
+    config_url: String[MAX_URL_SIZE]
+    tag: String[MAX_NAME_SIZE]
+    attributes: Bytes[MAX_ATTRIBUTES_SIZE]
+    don_family: String[MAX_DON_FAMILY_SIZE]
+
+
+@view
+@external
+def getWorkflow(owner: address, workflow_name: String[MAX_NAME_SIZE], tag: String[MAX_NAME_SIZE]) -> WorkflowMetadataView:
+    """
+    @notice Look up a workflow by its exact owner + name + tag.
+    @dev Reverts if no such workflow is registered.
+    """
+    ...
+
+
+@view
+@external
+def getWorkflowById(workflow_id: bytes32) -> WorkflowMetadataView:
+    """
+    @notice Look up a workflow by its ID.
+    @dev Reverts if the ID is not registered.
+    """
+    ...
+
+
+@view
+@external
+def getWorkflowListByOwner(owner: address, start: uint256, limit: uint256) -> DynArray[WorkflowMetadataView, MAX_WORKFLOW_QUERY_RESULTS]:
+    """
+    @notice List an owner's workflows (any name/tag), paginated.
+    @dev `limit` must not exceed MAX_WORKFLOW_QUERY_RESULTS.
+    """
+    ...
+
+
+@view
+@external
+def getWorkflowListByOwnerAndName(owner: address, workflow_name: String[MAX_NAME_SIZE], start: uint256, limit: uint256) -> DynArray[WorkflowMetadataView, MAX_WORKFLOW_QUERY_RESULTS]:
+    """
+    @notice List an owner's workflows matching a name (across tags), paginated.
+    @dev `limit` must not exceed MAX_WORKFLOW_QUERY_RESULTS.
+    """
+    ...
+
+
+@view
+@external
+def getWorkflowListByDON(don_family: String[MAX_DON_FAMILY_SIZE], start: uint256, limit: uint256) -> DynArray[WorkflowMetadataView, MAX_WORKFLOW_QUERY_RESULTS]:
+    """
+    @notice List all workflows registered to a DON family, paginated.
+    @dev `limit` must not exceed MAX_WORKFLOW_QUERY_RESULTS.
+    """
+    ...
+
+
+@view
+@external
+def getActiveWorkflowListByDON(don_family: String[MAX_DON_FAMILY_SIZE], start: uint256, limit: uint256) -> DynArray[WorkflowMetadataView, MAX_WORKFLOW_QUERY_RESULTS]:
+    """
+    @notice List only ACTIVE workflows registered to a DON family, paginated.
+    @dev `limit` must not exceed MAX_WORKFLOW_QUERY_RESULTS.
+    """
+    ...
+
+
+@view
+@external
+def totalActiveWorkflowsByOwner(owner: address) -> uint256:
+    ...
+
+
+@view
+@external
+def totalActiveWorkflowsOnDON(don_family: String[MAX_DON_FAMILY_SIZE]) -> uint256:
+    ...
