@@ -60,3 +60,35 @@ def test_ccip_receive_valid_message(ccip_module, dev_deployer):
 
     with boa.env.prank(CCIP_ROUTER):
         ccip_module.ccipReceive(message)  # must not revert
+
+
+def test_ccip_receive_max_data_size(ccip_module, dev_deployer):
+    """Inbound data up to MAX_DATA_SIZE (2048) is accepted; one byte over is rejected at decode."""
+    selector = 111
+    peer = boa.env.generate_address()
+
+    with boa.env.prank(dev_deployer):
+        ccip_module.set_peer(selector, peer)
+
+    with boa.env.prank(CCIP_ROUTER):
+        ccip_module.ccipReceive(build_any2evm_message(selector, peer, data=b"\x11" * 2048))
+        with boa.reverts():
+            ccip_module.ccipReceive(build_any2evm_message(selector, peer, data=b"\x11" * 2049))
+
+
+def test_ccip_receive_token_amounts_bound(ccip_module, dev_deployer):
+    """One token amount decodes fine; two exceed the DynArray bound (CCIP allows max 1 token/message)."""
+    selector = 111
+    peer = boa.env.generate_address()
+    token = boa.env.generate_address()
+
+    with boa.env.prank(dev_deployer):
+        ccip_module.set_peer(selector, peer)
+
+    one_token = build_any2evm_message(selector, peer)[:4] + ([(token, 100)],)
+    two_tokens = build_any2evm_message(selector, peer)[:4] + ([(token, 100), (token, 200)],)
+
+    with boa.env.prank(CCIP_ROUTER):
+        ccip_module.ccipReceive(one_token)
+        with boa.reverts():
+            ccip_module.ccipReceive(two_tokens)

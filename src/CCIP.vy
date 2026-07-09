@@ -1,9 +1,19 @@
 # pragma version 0.4.3
 # pragma optimize gas
 """
-@title CCIP Block Hash Sender
-@license MIT
-@author Curve Finance
+@title CCIP - Cross-chain messaging via a CCIP router
+
+@notice Sends and receives cross-chain messages: fee quoting, peer management,
+message building and transmission/receipt.
+
+@dev Inbound messages are only accepted from the router and a registered
+per-selector peer. Peers are configured via the internal setters.
+
+@license Copyright (c) Curve.Fi, 2026 - all rights reserved
+
+@author curve.fi
+
+@custom:security security@curve.fi
 """
 
 # Import ownership management
@@ -11,7 +21,7 @@ from snekmate.auth import ownable
 
 uses: ownable
 
-# https://github.com/smartcontractkit/ccip/blob/ccip-develop/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol
+# https://docs.chain.link/ccip/api-reference/evm/v1.6.0/i-router-client
 interface Router:
     # @param destinationChainSelector The destination chainSelector.
     # @param message The cross-chain CCIP message including data and/or tokens.
@@ -43,15 +53,16 @@ event SetReceiver:
     receiver: address
 
 
-# https://github.com/smartcontractkit/ccip/blob/ccip-develop/contracts/src/v0.8/ccip/libraries/Client.sol#L7-L10
+# https://docs.chain.link/ccip/api-reference/evm/v1.6.0/client#evmtokenamount
 struct EVMTokenAmount:
     token: address
     amount: uint256
 
-# https://github.com/smartcontractkit/ccip/blob/ccip-develop/contracts/src/v0.8/ccip/libraries/Client.sol#L20-L27
+# https://docs.chain.link/ccip/api-reference/evm/v1.6.0/client#evm2anymessage
 struct EVM2AnyMessage:
     receiver: Bytes[32]
     data: Bytes[MAX_DATA_SIZE]
+    # Max 1 distinct token per message: https://docs.chain.link/ccip/service-limits/evm
     token_amounts: DynArray[EVMTokenAmount, 1]
     fee_token: address
     extra_args: Bytes[68]
@@ -60,13 +71,9 @@ struct Any2EVMMessage:
     message_id: bytes32
     source_chain_selector: uint64
     sender: Bytes[32]
-    data: Bytes[64]
+    data: Bytes[MAX_DATA_SIZE]
+    # Max 1 distinct token per message: https://docs.chain.link/ccip/service-limits/evm
     token_amounts: DynArray[EVMTokenAmount, 1]
-
-# https://etherscan.io/address/0xd0B5Fc9790a6085b048b8Aa1ED26ca2b3b282CF2#code#F9#L30
-struct EVMExtraArgsV1:
-    gas_limit: uint256
-    strict: bool
 
 struct GenericExtraArgsV2:
     gas_limit: uint256
@@ -77,9 +84,10 @@ event SetSender:
     sender: address
 
 
-EVM_EXTRA_ARGS_V1_TAG: constant(bytes4) = 0x97a657c9
 GENERIC_EXTRA_ARGS_V2_TAG: constant(bytes4) = 0x181dcf10
-MAX_DATA_SIZE: constant(uint256) = 1024
+# CCIP protocol allows up to 30 KB
+# https://docs.chain.link/ccip/service-limits/evm
+MAX_DATA_SIZE: constant(uint256) = 2048
 
 # @dev Static list of supported ERC165 interface ids
 SUPPORTED_INTERFACES: constant(bytes4[2]) = [

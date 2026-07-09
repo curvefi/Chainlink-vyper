@@ -38,10 +38,13 @@ def test_supports_interface(ccip_module):
 
 
 def test_build_extra_args(ccip_module):
-    """build_extra_args returns non-empty bytes encoding the gas limit."""
+    """build_extra_args matches Client._argsToBytes: GENERIC_EXTRA_ARGS_V2_TAG ++ abi(gas_limit, true)."""
     extra_args = ccip_module.build_extra_args(CCIP_RECEIVE_GAS_LIMIT)
-    assert isinstance(extra_args, bytes)
-    assert len(extra_args) > 0
+    expected = bytes.fromhex("181dcf10") + boa.util.abi.abi_encode(
+        "(uint256,bool)", (CCIP_RECEIVE_GAS_LIMIT, True)
+    )
+    assert extra_args == expected
+    assert len(extra_args) == 68
 
 
 def test_build_simple_message(ccip_module):
@@ -52,5 +55,18 @@ def test_build_simple_message(ccip_module):
 
     message = ccip_module.build_simple_message(receiver, data, extra_args)
 
-    # token_amounts must be empty (index 2 in the tuple)
+    # receiver is the ABI-encoded (left-padded) address; token_amounts empty; native fee token
+    assert message[0] == boa.util.abi.abi_encode("address", receiver)
+    assert message[1] == data
     assert message[2] == []
+    assert message[3] == "0x" + "00" * 20
+
+
+def test_build_simple_message_max_data(ccip_module):
+    """build_simple_message accepts a full MAX_DATA_SIZE (2048) payload."""
+    receiver = boa.env.generate_address()
+    data = b"\x11" * 2048
+    extra_args = ccip_module.build_extra_args(CCIP_RECEIVE_GAS_LIMIT)
+
+    message = ccip_module.build_simple_message(receiver, data, extra_args)
+    assert message[1] == data

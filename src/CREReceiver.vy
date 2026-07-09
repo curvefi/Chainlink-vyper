@@ -44,9 +44,9 @@ uses: ownable
 MAX_MESSAGE_SIZE: constant(uint256) = 128
 HEX_CHARS: constant(String[16]) = "0123456789abcdef"
 
-MAX_WORKFLOW_NAME_SIZE: constant(uint256) = 40
+MAX_WORKFLOW_NAME_SIZE: constant(uint256) = 128
 MAX_METADATA_SIZE: constant(uint256) = 64
-MAX_REPORT_SIZE: constant(uint256) = 8192
+MAX_REPORT_SIZE: constant(uint256) = 8192 # not a spec value
 
 # @dev Static list of supported ERC165 interface ids
 SUPPORTED_INTERFACES: constant(bytes4[2]) = [
@@ -296,12 +296,12 @@ def _decode_metadata(metadata: Bytes[MAX_METADATA_SIZE]) -> (bytes32, bytes10, a
     @return workflow_name The name of the workflow (bytes10)
     @return workflow_owner The owner address of the workflow
     """
+    assert len(metadata) >= 62, "Wrong metadata size"
 
     # Metadata structure (encoded using abi.encodePacked by the Forwarder):
-    # - First 32 bytes: length of the byte array (standard for dynamic bytes)
-    # - Offset 32, size 32: workflow_id (bytes32)
-    # - Offset 64, size 10: workflow_name (bytes10)
-    # - Offset 74, size 20: workflow_owner (address)
+    # - First 32: workflow_id (bytes32)
+    # - Offset 32, size 10: workflow_name (bytes10)
+    # - Offset 42, size 20: workflow_owner (address)
     workflow_id: bytes32 = convert(slice(metadata, 0, 32), bytes32)
     workflow_name: bytes10 = convert(slice(metadata, 32, 10), bytes10)
     workflow_owner: address = convert(slice(metadata, 42, 20), address)

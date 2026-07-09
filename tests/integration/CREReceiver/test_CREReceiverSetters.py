@@ -115,6 +115,17 @@ def test_set_expected_workflow_name_empty_clears(cre_receiver, dev_deployer):
     assert cre_receiver.expected_workflow_name() == bytes(10)
 
 
+def test_set_expected_workflow_name_max_length(cre_receiver, dev_deployer):
+    """A 128-char name (registry's MAX_NAME_SIZE) is accepted and hashed identically to the Python mirror."""
+    name = "n" * 128
+    expected_bytes10 = compute_workflow_name_bytes(name)
+
+    with boa.env.prank(dev_deployer):
+        cre_receiver.set_expected_workflow_name(name)
+
+    assert cre_receiver.expected_workflow_name() == expected_bytes10
+
+
 def test_set_expected_workflow_name_unauthorized(cre_receiver):
     """Non-owner cannot set expected workflow name."""
     stranger = boa.env.generate_address()
