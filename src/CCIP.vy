@@ -16,6 +16,10 @@ per-selector peer. Peers are configured via the internal setters.
 @custom:security security@curve.fi
 """
 
+################################################################
+#                           INTERFACES                         #
+################################################################
+
 # Import ownership management
 from snekmate.auth import ownable
 
@@ -45,12 +49,41 @@ interface Router:
     def isChainSupported(_destinationChainSelector: uint64) -> bool: view
 
 
+################################################################
+#                            EVENTS                            #
+################################################################
+
+
 event SetRouter:
     router: address
 
 event SetReceiver:
     destination_chain_selector: indexed(uint64)
     receiver: address
+
+
+################################################################
+#                           CONSTANTS                          #
+################################################################
+
+
+GENERIC_EXTRA_ARGS_V2_TAG: constant(bytes4) = 0x181dcf10
+# CCIP protocol allows up to 30 KB
+# https://docs.chain.link/ccip/service-limits/evm
+MAX_DATA_SIZE: constant(uint256) = 2048
+
+# @dev Static list of supported ERC165 interface ids
+SUPPORTED_INTERFACES: constant(bytes4[2]) = [
+    # ERC165 interface ID of ERC165
+    0x01ffc9a7,
+    # ERC165 interface ID of CCIPReceiver
+    0x85572ffb,
+]
+
+
+################################################################
+#                            STORAGE                           #
+################################################################
 
 
 # https://docs.chain.link/ccip/api-reference/evm/v1.6.0/client#evmtokenamount
@@ -84,29 +117,54 @@ event SetSender:
     sender: address
 
 
-GENERIC_EXTRA_ARGS_V2_TAG: constant(bytes4) = 0x181dcf10
-# CCIP protocol allows up to 30 KB
-# https://docs.chain.link/ccip/service-limits/evm
-MAX_DATA_SIZE: constant(uint256) = 2048
-
-# @dev Static list of supported ERC165 interface ids
-SUPPORTED_INTERFACES: constant(bytes4[2]) = [
-    # ERC165 interface ID of ERC165
-    0x01ffc9a7,
-    # ERC165 interface ID of CCIPReceiver
-    0x85572ffb,
-]
-
-
 router: public(address)
 selector_to_receiver: public(HashMap[uint64, address])
 selector_to_sender: public(HashMap[uint64, address])
+
+
+################################################################
+#                          CONSTRUCTOR                         #
+################################################################
 
 
 @deploy
 def __init__(_ccip_router: address):
     self.router = _ccip_router
     log SetRouter(router=_ccip_router)
+
+
+################################################################
+#                      OWNER FUNCTIONS                         #
+################################################################
+
+
+@external
+def set_router(_ccip_router: address):
+    """
+    @notice Set the CCIP router
+    @dev Necessary for any potential upgrades to the router tech
+    """
+    ownable._check_owner()
+
+    self.router = _ccip_router
+    log SetRouter(router=_ccip_router)
+
+
+@external
+def set_peer(_chain_selector: uint64, _peer: address):
+    """
+    @notice Set the receiver and the sender for cross chain transactions
+    @param _chain_selector The unique CCIP destination chain selector
+    @param _peer The address on the destination chain to transmit messages to and/or receive from
+    """
+    ownable._check_owner()
+
+    self._set_peer(_chain_selector, _peer)
+
+
+################################################################
+#                     INTERNAL FUNCTIONS                       #
+################################################################
 
 
 @payable
@@ -193,24 +251,17 @@ def _set_peer(_chain_selector: uint64, _peer: address):
     self._set_receiver(_chain_selector, _peer)
 
 
-@external
-def set_router(_ccip_router: address):
-    """
-    @notice Set the CCIP router
-    @dev Necessary for any potential upgrades to the router tech
-    """
-    ownable._check_owner()
-
-    self.router = _ccip_router
-    log SetRouter(router=_ccip_router)
-
-
 @internal
 def _ccipReceive(_message: Any2EVMMessage):
     assert msg.sender == self.router, "Only router"
     # Verify that the message comes from a trusted peer
     peer: address = self.selector_to_sender[_message.source_chain_selector]
     assert peer != empty(address) and peer == abi_decode(_message.sender, address), "Invalid sender"
+
+
+################################################################
+#                     EXTERNAL FUNCTIONS                       #
+################################################################
 
 
 @view
