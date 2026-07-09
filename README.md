@@ -41,3 +41,10 @@ pytest tests/
 Some tests (`@pytest.mark.mainnet`) fork Ethereum mainnet against a real CCIP router and
 require a `DRPC_API_KEY` environment variable.
 
+## Example Use
+
+`examples/ReactorConsumer.vy` shows how to build a CRE report consumer on top of the
+`CREReceiver` module: it validates the report via `CREReceiver._on_report`, then decodes
+and acts on the payload (flagging an address). Use it as a template for wiring up your
+own `onReport` handler.
+
