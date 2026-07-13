@@ -37,14 +37,14 @@ def test_ccip_receive_rejects_unregistered_sender(ccip_module, dev_deployer):
 
 
 def test_ccip_receive_rejects_unregistered_chain(ccip_module):
-    """ccipReceive rejects messages from chains with no registered peer (zero address match fails)."""
+    """ccipReceive rejects messages from chains with no registered sender (fails loudly)."""
     unregistered_selector = 999
     any_sender = boa.env.generate_address()
 
     message = build_any2evm_message(unregistered_selector, any_sender)
 
     with boa.env.prank(CCIP_ROUTER):
-        with boa.reverts("Invalid sender"):
+        with boa.reverts("No sender"):
             ccip_module.ccipReceive(message)
 
 

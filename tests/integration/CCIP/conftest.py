@@ -49,6 +49,8 @@ exports: (
     CCIP.selector_to_sender,
     CCIP.set_router,
     CCIP.set_peer,
+    CCIP.set_receiver,
+    CCIP.set_sender,
     CCIP.supportsInterface,
 )
 
@@ -57,16 +59,6 @@ def __init__(_router: address):
     ownable.__init__()
     ownable._transfer_ownership(tx.origin)
     CCIP.__init__(_router)
-
-@external
-def set_receiver(_selector: uint64, _receiver: address):
-    ownable._check_owner()
-    CCIP._set_receiver(_selector, _receiver)
-
-@external
-def set_sender(_selector: uint64, _sender: address):
-    ownable._check_owner()
-    CCIP._set_sender(_selector, _sender)
 
 @external
 def ccipReceive(_message: CCIP.Any2EVMMessage):

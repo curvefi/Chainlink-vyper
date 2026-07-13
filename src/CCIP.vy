@@ -7,7 +7,9 @@
 message building and transmission/receipt.
 
 @dev Inbound messages are only accepted from the router and a registered
-per-selector peer. Peers are configured via the internal setters.
+per-selector sender; outbound messages only go to a registered receiver.
+Peers are configured via set_peer (symmetric) or set_receiver/set_sender
+(asymmetric).
 
 @license Copyright (c) Curve.Fi, 2026 - all rights reserved
 
@@ -162,6 +164,32 @@ def set_peer(_chain_selector: uint64, _peer: address):
     self._set_peer(_chain_selector, _peer)
 
 
+@external
+def set_receiver(_chain_selector: uint64, _receiver: address):
+    """
+    @notice Set only the outbound receiver for a destination chain
+    @dev Use for asymmetric trust (e.g. send-only peer where the return path differs)
+    @param _chain_selector The unique CCIP destination chain selector
+    @param _receiver The address on the destination chain to transmit messages to
+    """
+    ownable._check_owner()
+
+    self._set_receiver(_chain_selector, _receiver)
+
+
+@external
+def set_sender(_chain_selector: uint64, _sender: address):
+    """
+    @notice Set only the inbound trusted sender for a source chain
+    @dev Use for asymmetric trust (e.g. receive-only peer that this contract never sends to)
+    @param _chain_selector The unique CCIP source chain selector
+    @param _sender The address on the source chain to accept messages from
+    """
+    ownable._check_owner()
+
+    self._set_sender(_chain_selector, _sender)
+
+
 ################################################################
 #                     INTERNAL FUNCTIONS                       #
 ################################################################
@@ -177,6 +205,10 @@ def _transmit(
     """
     @dev See https://docs.chain.link/ccip/supported-networks/mainnet for chain selectors
     """
+    # Only transmit to a registered receiver, and only if the message targets it
+    receiver: address = self._get_receiver_or_revert(_destination_chain_selector)
+    assert abi_decode(_message.receiver, address) == receiver, "Receiver mismatch"
+
     extcall Router(self.router).ccipSend(_destination_chain_selector, _message, value=_fee)
 
 
@@ -251,12 +283,40 @@ def _set_peer(_chain_selector: uint64, _peer: address):
     self._set_receiver(_chain_selector, _peer)
 
 
+@view
+@internal
+def _get_receiver_or_revert(_destination_chain_selector: uint64) -> address:
+    """
+    @notice Get the outbound receiver for a destination chain; reverts if unset.
+    @dev Safe default for senders that must fail loudly on an unconfigured chain.
+    @param _destination_chain_selector The unique CCIP destination chain selector
+    @return receiver The trusted receiver address for the destination chain
+    """
+    receiver: address = self.selector_to_receiver[_destination_chain_selector]
+    assert receiver != empty(address), "No receiver"
+    return receiver
+
+
+@view
+@internal
+def _get_sender_or_revert(_source_chain_selector: uint64) -> address:
+    """
+    @notice Get the inbound trusted sender for a source chain; reverts if unset.
+    @dev Safe default for receivers that must fail loudly on an unconfigured chain.
+    @param _source_chain_selector The unique CCIP source chain selector
+    @return sender The trusted sender address for the source chain
+    """
+    sender: address = self.selector_to_sender[_source_chain_selector]
+    assert sender != empty(address), "No sender"
+    return sender
+
+
 @internal
 def _ccipReceive(_message: Any2EVMMessage):
     assert msg.sender == self.router, "Only router"
-    # Verify that the message comes from a trusted peer
-    peer: address = self.selector_to_sender[_message.source_chain_selector]
-    assert peer != empty(address) and peer == abi_decode(_message.sender, address), "Invalid sender"
+    # Verify that the message comes from the registered trusted sender
+    sender: address = self._get_sender_or_revert(_message.source_chain_selector)
+    assert sender == abi_decode(_message.sender, address), "Invalid sender"
 
 
 ################################################################

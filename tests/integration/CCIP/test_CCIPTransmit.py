@@ -13,6 +13,32 @@ def _build_test_message(ccip_module, receiver):
     return ccip_module.build_simple_message(receiver, data, extra_args)
 
 
+def test_transmit_no_receiver_reverts(ccip_module, dev_deployer):
+    """_transmit reverts before any router call when the destination has no registered receiver."""
+    selector = 111
+    receiver = boa.env.generate_address()
+    message = _build_test_message(ccip_module, receiver)
+
+    # No set_receiver / set_peer for `selector` → getter reverts loudly
+    with boa.reverts("No receiver"):
+        ccip_module.transmit(selector, message, 0)
+
+
+def test_transmit_receiver_mismatch_reverts(ccip_module, dev_deployer):
+    """_transmit reverts when the message targets an address other than the registered receiver."""
+    selector = 111
+    registered = boa.env.generate_address()
+    other = boa.env.generate_address()
+
+    with boa.env.prank(dev_deployer):
+        ccip_module.set_receiver(selector, registered)
+
+    # Message built for `other`, but `registered` is what's configured
+    message = _build_test_message(ccip_module, other)
+    with boa.reverts("Receiver mismatch"):
+        ccip_module.transmit(selector, message, 0)
+
+
 @pytest.mark.mainnet
 def test_transmit_deducts_fee_and_emits_ccip_event(ccip_module_mainnet, dev_deployer):
     """_transmit calls ccipSend: balance decreases by exactly the fee and the CCIP
