@@ -131,6 +131,57 @@ def test_on_report_workflow_name_mismatch(cre_receiver, dev_deployer):
             cre_receiver.onReport(metadata, b"")
 
 
+def test_on_report_short_metadata_reverts(cre_receiver, dev_deployer):
+    """onReport reverts with a clear message when metadata is shorter than 62 bytes and a check is enabled."""
+    forwarder = boa.env.generate_address()
+
+    with boa.env.prank(dev_deployer):
+        cre_receiver.set_forwarder_address(forwarder)
+        cre_receiver.set_expected_workflow_id(bytes.fromhex("aa" * 32))
+
+    with boa.env.prank(forwarder):
+        with boa.reverts("Wrong metadata size"):
+            cre_receiver.onReport(b"\x01" * 61, b"")
+
+
+def test_on_report_short_metadata_ok_without_checks(cre_receiver, dev_deployer):
+    """With no permission checks configured, metadata is never decoded so short metadata passes."""
+    forwarder = boa.env.generate_address()
+
+    with boa.env.prank(dev_deployer):
+        cre_receiver.set_forwarder_address(forwarder)
+
+    with boa.env.prank(forwarder):
+        cre_receiver.onReport(b"", b"")  # must not revert
+
+
+def test_on_report_production_64_byte_metadata(cre_receiver, dev_deployer):
+    """Real KeystoneForwarder metadata is 64 bytes (62 + 2-byte reportId); all checks must pass on it."""
+    forwarder = boa.env.generate_address()
+    author = boa.env.generate_address()
+    workflow_id = bytes.fromhex("dd" * 32)
+    name = "production_workflow"
+
+    with boa.env.prank(dev_deployer):
+        cre_receiver.set_forwarder_address(forwarder)
+        cre_receiver.set_expected_author(author)
+        cre_receiver.set_expected_workflow_id(workflow_id)
+        cre_receiver.set_expected_workflow_name(name)
+
+    metadata = (
+        encode_metadata(
+            workflow_id=workflow_id,
+            workflow_name=compute_workflow_name_bytes(name),
+            workflow_owner=author,
+        )
+        + b"\x00\x01"
+    )  # trailing reportId (bytes2)
+    assert len(metadata) == 64
+
+    with boa.env.prank(forwarder):
+        cre_receiver.onReport(metadata, b"")  # must not revert
+
+
 def test_on_report_all_checks_pass(cre_receiver, dev_deployer):
     """All permission checks pass together: forwarder, workflow_id, author, and name."""
     forwarder = boa.env.generate_address()

@@ -48,6 +48,7 @@ exports: (
     CCIP.selector_to_receiver,
     CCIP.selector_to_sender,
     CCIP.set_router,
+    CCIP.set_peer,
     CCIP.supportsInterface,
 )
 
@@ -66,11 +67,6 @@ def set_receiver(_selector: uint64, _receiver: address):
 def set_sender(_selector: uint64, _sender: address):
     ownable._check_owner()
     CCIP._set_sender(_selector, _sender)
-
-@external
-def set_peer(_selector: uint64, _peer: address):
-    ownable._check_owner()
-    CCIP._set_peer(_selector, _peer)
 
 @external
 def ccipReceive(_message: CCIP.Any2EVMMessage):
