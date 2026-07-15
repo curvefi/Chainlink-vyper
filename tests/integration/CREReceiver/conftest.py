@@ -70,6 +70,14 @@ def onReport(
     _report: Bytes[CREReceiver.MAX_REPORT_SIZE],
 ):
     CREReceiver._on_report(_metadata, _report)
+
+@external
+@payable
+def on_report_non_strict(
+    _metadata: Bytes[CREReceiver.MAX_METADATA_SIZE],
+    _report: Bytes[CREReceiver.MAX_REPORT_SIZE],
+):
+    CREReceiver._on_report(_metadata, _report, False)
 """
 
 

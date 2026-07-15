@@ -25,15 +25,42 @@ def test_on_report_rejects_non_forwarder(cre_receiver, dev_deployer):
             cre_receiver.onReport(encode_metadata(), b"")
 
 
-def test_on_report_accepts_valid_forwarder(cre_receiver, dev_deployer):
-    """onReport with no permission checks passes when caller is the forwarder."""
+def test_on_report_forwarder_only_reverts_in_strict_mode(cre_receiver, dev_deployer):
+    """Strict mode (default): a forwarder with no workflow identity configured is rejected."""
     forwarder = boa.env.generate_address()
 
     with boa.env.prank(dev_deployer):
         cre_receiver.set_forwarder_address(forwarder)
 
     with boa.env.prank(forwarder):
-        cre_receiver.onReport(encode_metadata(), b"")  # must not revert
+        with boa.reverts("Workflow parameters are not set"):
+            cre_receiver.onReport(encode_metadata(), b"")
+
+
+def test_on_report_workflow_id_only_satisfies_identity(cre_receiver, dev_deployer):
+    """A single configured identity field (workflow_id) is enough to satisfy strict mode."""
+    forwarder = boa.env.generate_address()
+    workflow_id = bytes.fromhex("ab" * 32)
+
+    with boa.env.prank(dev_deployer):
+        cre_receiver.set_forwarder_address(forwarder)
+        cre_receiver.set_expected_workflow_id(workflow_id)
+
+    with boa.env.prank(forwarder):
+        cre_receiver.onReport(encode_metadata(workflow_id=workflow_id), b"")  # must not revert
+
+
+def test_on_report_author_only_satisfies_identity(cre_receiver, dev_deployer):
+    """expected_author alone satisfies the identity gate (owner-level binding, no name/id)."""
+    forwarder = boa.env.generate_address()
+    author = boa.env.generate_address()
+
+    with boa.env.prank(dev_deployer):
+        cre_receiver.set_forwarder_address(forwarder)
+        cre_receiver.set_expected_author(author)
+
+    with boa.env.prank(forwarder):
+        cre_receiver.onReport(encode_metadata(workflow_owner=author), b"")  # must not revert
 
 
 def test_on_report_workflow_id_mismatch(cre_receiver, dev_deployer):
@@ -144,15 +171,16 @@ def test_on_report_short_metadata_reverts(cre_receiver, dev_deployer):
             cre_receiver.onReport(b"\x01" * 61, b"")
 
 
-def test_on_report_short_metadata_ok_without_checks(cre_receiver, dev_deployer):
-    """With no permission checks configured, metadata is never decoded so short metadata passes."""
+def test_on_report_non_strict_allows_forwarder_only(cre_receiver, dev_deployer):
+    """Non-strict opt-out: a forwarder with no identity configured passes, and metadata
+    is never decoded (so empty/short metadata is fine)."""
     forwarder = boa.env.generate_address()
 
     with boa.env.prank(dev_deployer):
         cre_receiver.set_forwarder_address(forwarder)
 
     with boa.env.prank(forwarder):
-        cre_receiver.onReport(b"", b"")  # must not revert
+        cre_receiver.on_report_non_strict(b"", b"")  # must not revert
 
 
 def test_on_report_production_64_byte_metadata(cre_receiver, dev_deployer):

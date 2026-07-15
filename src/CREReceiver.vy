@@ -250,7 +250,11 @@ def _bytes_to_hex_string(data: Bytes[5]) -> String[10]:
 
 
 @internal
-def _on_report(metadata: Bytes[MAX_METADATA_SIZE], report: Bytes[MAX_REPORT_SIZE]):
+def _on_report(
+    metadata: Bytes[MAX_METADATA_SIZE], 
+    report: Bytes[MAX_REPORT_SIZE],
+    strict_mode: bool = True
+):
     """
     @dev Performs optional validation checks based on which permission fields are set
     """
@@ -259,31 +263,36 @@ def _on_report(metadata: Bytes[MAX_METADATA_SIZE], report: Bytes[MAX_REPORT_SIZE
     assert msg.sender == self.forwarder_address, "Invalid sender"
 
     # Security Checks 2-4: Verify workflow identity - ID, owner, and/or name (if any are configured)
-    if self.expected_workflow_id != empty(bytes32) or self.expected_author != empty(address) or self.expected_workflow_name != empty(bytes10):
+    workflow_enforced: bool = self.expected_workflow_id != empty(bytes32) or self.expected_author != empty(address) or self.expected_workflow_name != empty(bytes10)
 
-        workflow_id: bytes32 = empty(bytes32)
-        workflow_name: bytes10 = empty(bytes10)
-        workflow_owner: address = empty(address)
+    if not strict_mode and not workflow_enforced:
+        return
+    
+    assert workflow_enforced, "Workflow parameters are not set"
 
-        workflow_id, workflow_name, workflow_owner = self._decode_metadata(metadata)
-        assert self.expected_workflow_id == empty(bytes32) or workflow_id == self.expected_workflow_id, "Invalid workflow id"
-        assert self.expected_author == empty(address) or workflow_owner == self.expected_author, "Invalid author"
+    workflow_id: bytes32 = empty(bytes32)
+    workflow_name: bytes10 = empty(bytes10)
+    workflow_owner: address = empty(address)
 
-        # ================================================================
-        # WORKFLOW NAME VALIDATION - REQUIRES AUTHOR VALIDATION
-        # ================================================================
-        # Do not rely on workflow name validation alone. Workflow names are unique
-        # per owner, but not across owners.
-        # Furthermore, workflow names use 40-bit truncation (bytes10), making collisions possible.
-        # Therefore, workflow name validation REQUIRES author (workflow owner) validation.
-        # The code enforces this dependency at runtime.
-        # ================================================================
-        if self.expected_workflow_name != empty(bytes10):
-            # Author must be configured if workflow name is used
-            assert self.expected_author != empty(address), "Workflow name requires author validation"
+    workflow_id, workflow_name, workflow_owner = self._decode_metadata(metadata)
+    assert self.expected_workflow_id == empty(bytes32) or workflow_id == self.expected_workflow_id, "Invalid workflow id"
+    assert self.expected_author == empty(address) or workflow_owner == self.expected_author, "Invalid author"
 
-            # Validate workflow name matches (author already validated above)
-            assert workflow_name == self.expected_workflow_name, "Invalid workflow name"
+    # ================================================================
+    # WORKFLOW NAME VALIDATION - REQUIRES AUTHOR VALIDATION
+    # ================================================================
+    # Do not rely on workflow name validation alone. Workflow names are unique
+    # per owner, but not across owners.
+    # Furthermore, workflow names use 40-bit truncation (bytes10), making collisions possible.
+    # Therefore, workflow name validation REQUIRES author (workflow owner) validation.
+    # The code enforces this dependency at runtime.
+    # ================================================================
+    if self.expected_workflow_name != empty(bytes10):
+        # Author must be configured if workflow name is used
+        assert self.expected_author != empty(address), "Workflow name requires author validation"
+
+        # Validate workflow name matches (author already validated above)
+        assert workflow_name == self.expected_workflow_name, "Invalid workflow name"
 
 
 @internal
