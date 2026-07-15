@@ -111,12 +111,13 @@ struct EVM2AnyMessage:
     fee_token: address
     extra_args: Bytes[MAX_EXTRA_ARGS_SIZE]
 
+# https://docs.chain.link/ccip/api-reference/evm/v1.6.1/client#any2evmmessage
 struct Any2EVMMessage:
     message_id: bytes32
     source_chain_selector: uint64
     sender: Bytes[MAX_ADDRESS_BYTES]
     data: Bytes[MAX_DATA_SIZE]
-    token_amounts: DynArray[EVMTokenAmount, MAX_TOKENS_PER_MESSAGE]
+    dest_token_amounts: DynArray[EVMTokenAmount, MAX_TOKENS_PER_MESSAGE]
 
 struct GenericExtraArgsV2:
     gas_limit: uint256

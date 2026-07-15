@@ -76,7 +76,7 @@ def test_ccip_receive_max_data_size(ccip_module, dev_deployer):
             ccip_module.ccipReceive(build_any2evm_message(selector, peer, data=b"\x11" * 2049))
 
 
-def test_ccip_receive_token_amounts_bound(ccip_module, dev_deployer):
+def test_ccip_receive_dest_token_amounts_bound(ccip_module, dev_deployer):
     """One token amount decodes fine; two exceed the DynArray bound (CCIP allows max 1 token/message)."""
     selector = 111
     peer = boa.env.generate_address()
