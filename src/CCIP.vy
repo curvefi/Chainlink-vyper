@@ -6,7 +6,8 @@
 @notice Sends and receives cross-chain messages: fee quoting, peer management,
 message building and transmission/receipt.
 
-@dev Inbound messages are only accepted from the router and a registered
+@dev Profile: CCIP EVM v1.6.1, EVM-to-EVM, Receiver V1, GenericExtraArgsV2.
+Inbound messages are only accepted from the router and a registered
 per-selector sender; outbound messages only go to a registered receiver.
 Peers are configured via set_peer (symmetric) or set_receiver/set_sender
 (asymmetric).
@@ -27,7 +28,7 @@ from snekmate.auth import ownable
 
 uses: ownable
 
-# https://docs.chain.link/ccip/api-reference/evm/v1.6.0/i-router-client
+# https://docs.chain.link/ccip/api-reference/evm/v1.6.1/i-router-client
 interface Router:
     # @param destinationChainSelector The destination chainSelector.
     # @param message The cross-chain CCIP message including data and/or tokens.
@@ -73,9 +74,15 @@ event CCIPSecurityWarning:
 
 
 GENERIC_EXTRA_ARGS_V2_TAG: constant(bytes4) = 0x181dcf10
-# CCIP protocol allows up to 30 KB
-# https://docs.chain.link/ccip/service-limits/evm
+
+# This library's compile-time payload cap. CCIP itself allows up to 30 KB
+# (https://docs.chain.link/ccip/service-limits/evm); 2048 is a deliberately narrower limit here.
 MAX_DATA_SIZE: constant(uint256) = 2048
+
+# ABI-bound sizes used by the message structs and builders
+MAX_TOKENS_PER_MESSAGE: constant(uint256) = 1  # CCIP allows at most 1 distinct token per message
+MAX_ADDRESS_BYTES: constant(uint256) = 32  # abi-encoded address (left-padded to 32 bytes)
+MAX_EXTRA_ARGS_SIZE: constant(uint256) = 68  # 4-byte tag + abi(GenericExtraArgsV2) (= 4 + 64)
 
 # @dev Static list of supported ERC165 interface ids
 SUPPORTED_INTERFACES: constant(bytes4[2]) = [
@@ -91,27 +98,25 @@ SUPPORTED_INTERFACES: constant(bytes4[2]) = [
 ################################################################
 
 
-# https://docs.chain.link/ccip/api-reference/evm/v1.6.0/client#evmtokenamount
+# https://docs.chain.link/ccip/api-reference/evm/v1.6.1/client#evmtokenamount
 struct EVMTokenAmount:
     token: address
     amount: uint256
 
-# https://docs.chain.link/ccip/api-reference/evm/v1.6.0/client#evm2anymessage
+# https://docs.chain.link/ccip/api-reference/evm/v1.6.1/client#evm2anymessage
 struct EVM2AnyMessage:
-    receiver: Bytes[32]
+    receiver: Bytes[MAX_ADDRESS_BYTES]
     data: Bytes[MAX_DATA_SIZE]
-    # Max 1 distinct token per message: https://docs.chain.link/ccip/service-limits/evm
-    token_amounts: DynArray[EVMTokenAmount, 1]
+    token_amounts: DynArray[EVMTokenAmount, MAX_TOKENS_PER_MESSAGE]
     fee_token: address
-    extra_args: Bytes[68]
+    extra_args: Bytes[MAX_EXTRA_ARGS_SIZE]
 
 struct Any2EVMMessage:
     message_id: bytes32
     source_chain_selector: uint64
-    sender: Bytes[32]
+    sender: Bytes[MAX_ADDRESS_BYTES]
     data: Bytes[MAX_DATA_SIZE]
-    # Max 1 distinct token per message: https://docs.chain.link/ccip/service-limits/evm
-    token_amounts: DynArray[EVMTokenAmount, 1]
+    token_amounts: DynArray[EVMTokenAmount, MAX_TOKENS_PER_MESSAGE]
 
 struct GenericExtraArgsV2:
     gas_limit: uint256
@@ -236,11 +241,11 @@ def _quote(_destination_chain_selector: uint64, message: EVM2AnyMessage, allow_u
 
 @internal
 @pure
-def build_extra_args(gas_limit: uint256) -> Bytes[68]:
+def build_extra_args(gas_limit: uint256) -> Bytes[MAX_EXTRA_ARGS_SIZE]:
     # allow_out_of_order_execution is always True: in-order execution is being
     # deprecated by CCIP in early 2026.
     # https://docs.chain.link/ccip/concepts/best-practices/evm#setting-allowoutoforderexecution
-    extra_args: Bytes[68] = abi_encode(
+    extra_args: Bytes[MAX_EXTRA_ARGS_SIZE] = abi_encode(
         GenericExtraArgsV2(gas_limit=gas_limit, allow_out_of_order_execution=True),
         method_id=GENERIC_EXTRA_ARGS_V2_TAG
     )
@@ -250,11 +255,11 @@ def build_extra_args(gas_limit: uint256) -> Bytes[68]:
 
 @internal
 @pure
-def build_simple_message(receiver: address, data: Bytes[MAX_DATA_SIZE], extra_args: Bytes[68]) -> EVM2AnyMessage:
+def build_simple_message(receiver: address, data: Bytes[MAX_DATA_SIZE], extra_args: Bytes[MAX_EXTRA_ARGS_SIZE]) -> EVM2AnyMessage:
     message: EVM2AnyMessage = EVM2AnyMessage(
             receiver=abi_encode(receiver),
             data=data,
-            token_amounts=empty(DynArray[EVMTokenAmount, 1]),
+            token_amounts=empty(DynArray[EVMTokenAmount, MAX_TOKENS_PER_MESSAGE]),
             fee_token=empty(address),
             extra_args=extra_args
         )
@@ -325,8 +330,13 @@ def _get_sender_or_revert(_source_chain_selector: uint64) -> address:
     return sender
 
 
+@view
 @internal
 def _ccipReceive(_message: Any2EVMMessage):
+    """
+    @notice Authenticate an inbound CCIP message: router caller + registered sender.
+    @dev A consuming ccipReceive() MUST call this first, before decoding or acting on data.
+    """
     assert msg.sender == self.router, "Only router"
     # Verify that the message comes from the registered trusted sender
     sender: address = self._get_sender_or_revert(_message.source_chain_selector)
