@@ -17,7 +17,7 @@ def test_set_forwarder_address(cre_receiver, dev_deployer):
 
 
 def test_set_forwarder_address_zero_emits_warning(cre_receiver, dev_deployer):
-    """Setting forwarder to zero address emits SecurityWarning alongside the update event."""
+    """Setting forwarder to zero address emits CRESecurityWarning alongside the update event."""
     forwarder = boa.env.generate_address()
     with boa.env.prank(dev_deployer):
         cre_receiver.set_forwarder_address(forwarder)
@@ -27,7 +27,7 @@ def test_set_forwarder_address_zero_emits_warning(cre_receiver, dev_deployer):
 
     events = cre_receiver.get_logs()
     assert cre_receiver.forwarder_address() == EMPTY_ADDRESS
-    assert any("SecurityWarning" in str(e) for e in events)
+    assert any("CRESecurityWarning" in str(e) for e in events)
     assert any("ForwarderAddressUpdated" in str(e) for e in events)
 
 

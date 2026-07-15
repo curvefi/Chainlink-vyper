@@ -63,6 +63,9 @@ event SetReceiver:
     destination_chain_selector: indexed(uint64)
     receiver: address
 
+event CCIPSecurityWarning:
+    message: String[64]
+
 
 ################################################################
 #                           CONSTANTS                          #
@@ -131,6 +134,9 @@ selector_to_sender: public(HashMap[uint64, address])
 
 @deploy
 def __init__(_ccip_router: address):
+    # Zero router disables the CCIP path (mirrors a zero CRE forwarder)
+    if _ccip_router == empty(address):
+        log CCIPSecurityWarning(message="CCIP is disabled")
     self.router = _ccip_router
     log SetRouter(router=_ccip_router)
 
@@ -144,10 +150,13 @@ def __init__(_ccip_router: address):
 def set_router(_ccip_router: address):
     """
     @notice Set the CCIP router
-    @dev Necessary for any potential upgrades to the router tech
+    @dev Necessary for any potential upgrades to the router tech.
+         Setting to empty(address) disables the CCIP path.
     """
     ownable._check_owner()
 
+    if _ccip_router == empty(address):
+        log CCIPSecurityWarning(message="CCIP is disabled")
     self.router = _ccip_router
     log SetRouter(router=_ccip_router)
 
@@ -228,6 +237,9 @@ def _quote(_destination_chain_selector: uint64, message: EVM2AnyMessage, allow_u
 @internal
 @pure
 def build_extra_args(gas_limit: uint256) -> Bytes[68]:
+    # allow_out_of_order_execution is always True: in-order execution is being
+    # deprecated by CCIP in early 2026.
+    # https://docs.chain.link/ccip/concepts/best-practices/evm#setting-allowoutoforderexecution
     extra_args: Bytes[68] = abi_encode(
         GenericExtraArgsV2(gas_limit=gas_limit, allow_out_of_order_execution=True),
         method_id=GENERIC_EXTRA_ARGS_V2_TAG

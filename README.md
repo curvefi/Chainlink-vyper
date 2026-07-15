@@ -47,4 +47,3 @@ require a `DRPC_API_KEY` environment variable.
 `CREReceiver` module: it validates the report via `CREReceiver._on_report`, then decodes
 and acts on the payload (flagging an address). Use it as a template for wiring up your
 own `onReport` handler.
-

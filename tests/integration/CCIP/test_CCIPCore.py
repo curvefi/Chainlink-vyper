@@ -1,7 +1,7 @@
 """Test CCIP module core: initialization, router management, and interface support."""
 
 import boa
-from conftest import CCIP_ROUTER, CCIP_RECEIVE_GAS_LIMIT
+from conftest import CCIP_ROUTER, CCIP_RECEIVE_GAS_LIMIT, EMPTY_ADDRESS, _CCIP_WRAPPER
 
 
 def test_initialization(ccip_module, dev_deployer):
@@ -28,6 +28,26 @@ def test_set_router_unauthorized(ccip_module):
     with boa.env.prank(stranger):
         with boa.reverts("ownable: caller is not the owner"):
             ccip_module.set_router(boa.env.generate_address())
+
+
+def test_init_zero_router_emits_warning(dev_deployer):
+    """Deploying with a zero router disables CCIP and emits CCIPSecurityWarning."""
+    with boa.env.prank(dev_deployer):
+        module = boa.loads(_CCIP_WRAPPER, EMPTY_ADDRESS)
+
+    events = module.get_logs()
+    assert module.router() == EMPTY_ADDRESS
+    assert any("CCIPSecurityWarning" in str(e) for e in events)
+
+
+def test_set_router_zero_emits_warning(ccip_module, dev_deployer):
+    """Setting the router to zero disables CCIP and emits CCIPSecurityWarning."""
+    with boa.env.prank(dev_deployer):
+        ccip_module.set_router(EMPTY_ADDRESS)
+
+    events = ccip_module.get_logs()
+    assert ccip_module.router() == EMPTY_ADDRESS
+    assert any("CCIPSecurityWarning" in str(e) for e in events)
 
 
 def test_supports_interface(ccip_module):

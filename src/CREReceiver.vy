@@ -89,7 +89,7 @@ event ExpectedWorkflowIdUpdated:
     previous_id: indexed(bytes32)
     new_id: indexed(bytes32)
 
-event SecurityWarning:
+event CRESecurityWarning:
     message: String[MAX_MESSAGE_SIZE]
 
 
@@ -106,7 +106,7 @@ def __init__(
     """
 
     if _forwarder_address == empty(address):
-        log SecurityWarning(
+        log CRESecurityWarning(
             message="CRE onReport is disabled"
         )
 
@@ -137,7 +137,7 @@ def set_forwarder_address(
     # Emit warning if disabling forwarder check
 
     if _forwarder_address == empty(address):
-        log SecurityWarning(
+        log CRESecurityWarning(
             message="CRE onReport is disabled"
         )
 
@@ -251,7 +251,7 @@ def _bytes_to_hex_string(data: Bytes[5]) -> String[10]:
 
 @internal
 def _on_report(
-    metadata: Bytes[MAX_METADATA_SIZE], 
+    metadata: Bytes[MAX_METADATA_SIZE],
     report: Bytes[MAX_REPORT_SIZE],
     strict_mode: bool = True
 ):
@@ -263,11 +263,15 @@ def _on_report(
     assert msg.sender == self.forwarder_address, "Invalid sender"
 
     # Security Checks 2-4: Verify workflow identity - ID, owner, and/or name (if any are configured)
-    workflow_enforced: bool = self.expected_workflow_id != empty(bytes32) or self.expected_author != empty(address) or self.expected_workflow_name != empty(bytes10)
+    workflow_enforced: bool = (
+        self.expected_workflow_id != empty(bytes32) or
+        self.expected_author != empty(address) or
+        self.expected_workflow_name != empty(bytes10)
+    )
 
     if not strict_mode and not workflow_enforced:
         return
-    
+
     assert workflow_enforced, "Workflow parameters are not set"
 
     workflow_id: bytes32 = empty(bytes32)
