@@ -195,13 +195,12 @@ def set_sender(_chain_selector: uint64, _sender: address):
 ################################################################
 
 
-@payable
 @internal
 def _transmit(
     _destination_chain_selector: uint64,
     _message: EVM2AnyMessage,
-    _fee: uint256
-    ):
+    _max_fee: uint256
+    ) -> (bytes32, uint256):
     """
     @dev See https://docs.chain.link/ccip/supported-networks/mainnet for chain selectors
     """
@@ -209,13 +208,16 @@ def _transmit(
     receiver: address = self._get_receiver_or_revert(_destination_chain_selector)
     assert abi_decode(_message.receiver, address) == receiver, "Receiver mismatch"
 
-    extcall Router(self.router).ccipSend(_destination_chain_selector, _message, value=_fee)
+    fee: uint256 = self._quote(_destination_chain_selector, _message, False)  # allow_unsupported
+    assert fee <= _max_fee, "Too high fees"
+    message_id: bytes32 = extcall Router(self.router).ccipSend(_destination_chain_selector, _message, value=fee)
+    return message_id, fee
 
 
 @view
 @internal
-def _quote(_destination_chain_selector: uint64, message: EVM2AnyMessage) -> uint256:
-    if not staticcall Router(self.router).isChainSupported(_destination_chain_selector):
+def _quote(_destination_chain_selector: uint64, message: EVM2AnyMessage, allow_unsupported: bool = False) -> uint256:
+    if allow_unsupported and not staticcall Router(self.router).isChainSupported(_destination_chain_selector):
         return 0
     return staticcall Router(self.router).getFee(
         _destination_chain_selector,

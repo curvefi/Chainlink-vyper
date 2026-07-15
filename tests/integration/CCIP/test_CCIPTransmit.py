@@ -71,6 +71,42 @@ def test_transmit_deducts_fee_and_emits_ccip_event(ccip_module_mainnet, dev_depl
 
 
 @pytest.mark.mainnet
+def test_transmit_returns_message_id_and_actual_fee(ccip_module_mainnet, dev_deployer):
+    """_transmit returns the router message id and the actual (live-quoted) fee paid."""
+    receiver = boa.env.generate_address()
+
+    with boa.env.prank(dev_deployer):
+        ccip_module_mainnet.set_receiver(BASE_CHAIN_SELECTOR, receiver)
+
+    message = _build_test_message(ccip_module_mainnet, receiver)
+    fee = ccip_module_mainnet.quote(BASE_CHAIN_SELECTOR, message)
+
+    boa.env.set_balance(ccip_module_mainnet.address, fee)
+
+    # generous ceiling: max_fee above the live fee
+    message_id, paid = ccip_module_mainnet.transmit(BASE_CHAIN_SELECTOR, message, fee * 2)
+    assert paid == fee
+    assert message_id != bytes(32)
+
+
+@pytest.mark.mainnet
+def test_transmit_reverts_when_max_fee_below_live(ccip_module_mainnet, dev_deployer):
+    """_transmit reverts with "Too high fees" when the live fee exceeds max_fee (never overpays)."""
+    receiver = boa.env.generate_address()
+
+    with boa.env.prank(dev_deployer):
+        ccip_module_mainnet.set_receiver(BASE_CHAIN_SELECTOR, receiver)
+
+    message = _build_test_message(ccip_module_mainnet, receiver)
+    fee = ccip_module_mainnet.quote(BASE_CHAIN_SELECTOR, message)
+
+    boa.env.set_balance(ccip_module_mainnet.address, fee)
+
+    with boa.reverts("Too high fees"):
+        ccip_module_mainnet.transmit(BASE_CHAIN_SELECTOR, message, fee - 1)
+
+
+@pytest.mark.mainnet
 def test_transmit_insufficient_balance_reverts(ccip_module_mainnet, dev_deployer):
     """_transmit reverts when the contract balance is less than the requested fee."""
     receiver = boa.env.generate_address()

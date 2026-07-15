@@ -1,3 +1,5 @@
+import os
+
 import boa
 import pytest
 
@@ -65,13 +67,13 @@ def ccipReceive(_message: CCIP.Any2EVMMessage):
     CCIP._ccipReceive(_message)
 
 @external
-def transmit(_selector: uint64, _message: CCIP.EVM2AnyMessage, _fee: uint256):
-    CCIP._transmit(_selector, _message, _fee)
+def transmit(_selector: uint64, _message: CCIP.EVM2AnyMessage, _max_fee: uint256) -> (bytes32, uint256):
+    return CCIP._transmit(_selector, _message, _max_fee)
 
 @view
 @external
-def quote(_selector: uint64, _message: CCIP.EVM2AnyMessage) -> uint256:
-    return CCIP._quote(_selector, _message)
+def quote(_selector: uint64, _message: CCIP.EVM2AnyMessage, _allow_unsupported: bool = False) -> uint256:
+    return CCIP._quote(_selector, _message, _allow_unsupported)
 
 @pure
 @external
@@ -91,7 +93,13 @@ def build_simple_message(
 
 @pytest.fixture()
 def rpc_url(drpc_api_key):
-    """Override parent conftest's rpc_url: always fork Ethereum mainnet."""
+    """Override parent conftest's rpc_url: always fork Ethereum mainnet.
+
+    MAINNET_FORK_RPC overrides the endpoint (useful when the DRPC free tier throttles).
+    """
+    override = os.getenv("MAINNET_FORK_RPC")
+    if override:
+        return override
     return f"https://lb.drpc.org/ogrpc?network=ethereum&dkey={drpc_api_key}"
 
 
