@@ -1,12 +1,13 @@
 # pragma version 0.4.3
 
 """
-@title IWorkflowRegistry - Chainlink CRE WorkflowRegistry (query subset)
+@title IWorkflowRegistry - Chainlink CRE WorkflowRegistry
 
-@notice Read-only interface for looking up CRE workflow metadata (ID, status,
-DON family) by owner, name and/or tag. Backs on-chain resolution of a
-workflow's ID as an alternative to the gateway's flakier
-{workflowOwner, workflowName, workflowTag} HTTP selector.
+@notice Interface for CRE workflow metadata (ID, status, DON family) by owner,
+name and/or tag, plus the owner-side writes that register, pause and retire a
+workflow. The queries back on-chain resolution of a workflow's ID as an
+alternative to the gateway's flakier {workflowOwner, workflowName,
+workflowTag} HTTP selector; the writes let a contract own a workflow.
 
 @dev The WorkflowRegistry is always deployed on Ethereum mainnet, regardless
 of which chain(s) the workflow itself delivers reports to — a workflow's
@@ -27,6 +28,7 @@ MAX_NAME_SIZE: constant(uint256) = 128
 MAX_URL_SIZE: constant(uint256) = 256
 MAX_DON_FAMILY_SIZE: constant(uint256) = 64
 MAX_ATTRIBUTES_SIZE: constant(uint256) = 1024
+MAX_SIGNATURE_SIZE: constant(uint256) = 65
 
 
 struct WorkflowMetadataView:
@@ -111,4 +113,91 @@ def totalActiveWorkflowsByOwner(owner: address) -> uint256:
 @view
 @external
 def totalActiveWorkflowsOnDON(don_family: String[MAX_DON_FAMILY_SIZE]) -> uint256:
+    ...
+
+
+@view
+@external
+def getConfig() -> (uint8, uint8, uint8, uint16, uint32):
+    """
+    @notice Registry limits: max name, tag, URL and attribute lengths, and max allowlist expiry.
+    @dev Never bound a caller's argument below these, or a value the registry accepts reverts earlier.
+    """
+    ...
+
+
+@external
+def linkOwner(validityTimestamp: uint256, proof: bytes32, signature: Bytes[MAX_SIGNATURE_SIZE]):
+    """
+    @notice Register the caller as a workflow owner; ownership is msg.sender, there is no owner argument.
+    @dev The proof and signature are issued by an address in the registry's allowed signer set.
+    """
+    ...
+
+
+@external
+def unlinkOwner(owner: address, validityTimestamp: uint256, signature: Bytes[MAX_SIGNATURE_SIZE]):
+    """
+    @notice Drop an ownership link.
+    @dev There is no per-workflow ownership transfer, so migrating means registering afresh.
+    """
+    ...
+
+
+@external
+def upsertWorkflow(
+    workflowName: String[MAX_NAME_SIZE],
+    tag: String[MAX_NAME_SIZE],
+    workflowId: bytes32,
+    status: uint8,
+    donFamily: String[MAX_DON_FAMILY_SIZE],
+    binaryUrl: String[MAX_URL_SIZE],
+    configUrl: String[MAX_URL_SIZE],
+    attributes: Bytes[MAX_ATTRIBUTES_SIZE],
+    keepAlive: bool,
+):
+    """
+    @notice Register or update the caller's workflow, keyed by (caller, workflowName, tag).
+    @dev An update must repeat the stored status and DON family; a fresh tag inserts a new workflow.
+    """
+    ...
+
+
+@external
+def pauseWorkflow(workflow_id: bytes32):
+    """
+    @notice Pause one of the caller's workflows.
+    """
+    ...
+
+
+@external
+def activateWorkflow(workflow_id: bytes32, don_family: String[MAX_DON_FAMILY_SIZE]):
+    """
+    @notice Activate one of the caller's workflows.
+    """
+    ...
+
+
+@external
+def deleteWorkflow(workflow_id: bytes32):
+    """
+    @notice Permanently remove one of the caller's workflows; the registry frees the ID for reuse.
+    """
+    ...
+
+
+@external
+def updateWorkflowDONFamily(workflow_id: bytes32, new_don_family: String[MAX_DON_FAMILY_SIZE]):
+    """
+    @notice Move a workflow to another DON family, which upsertWorkflow cannot do.
+    """
+    ...
+
+
+@external
+def allowlistRequest(request_digest: bytes32, expiry_timestamp: uint32):
+    """
+    @notice Allowlist a request digest, where the registry is configured to demand one.
+    """
     ...
