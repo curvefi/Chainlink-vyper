@@ -4,6 +4,11 @@ import boa
 from conftest import EMPTY_ADDRESS, compute_workflow_name_bytes
 
 
+def _last_event(events, name):
+    """Most recent decoded event of the given type; boa names each namedtuple after its event."""
+    return [e for e in events if type(e).__name__ == name][-1]
+
+
 def test_set_forwarder_address(cre_receiver, dev_deployer):
     """Owner sets forwarder address; stored and ForwarderAddressUpdated event emitted."""
     forwarder = boa.env.generate_address()
@@ -13,7 +18,7 @@ def test_set_forwarder_address(cre_receiver, dev_deployer):
 
     events = cre_receiver.get_logs()
     assert cre_receiver.forwarder_address() == forwarder
-    assert any("ForwarderAddressUpdated" in str(e) for e in events)
+    assert _last_event(events, "ForwarderAddressUpdated").new_forwarder == forwarder
 
 
 def test_set_forwarder_address_zero_emits_warning(cre_receiver, dev_deployer):
@@ -28,7 +33,9 @@ def test_set_forwarder_address_zero_emits_warning(cre_receiver, dev_deployer):
     events = cre_receiver.get_logs()
     assert cre_receiver.forwarder_address() == EMPTY_ADDRESS
     assert any("CRESecurityWarning" in str(e) for e in events)
-    assert any("ForwarderAddressUpdated" in str(e) for e in events)
+    update = _last_event(events, "ForwarderAddressUpdated")
+    assert update.previous_forwarder == forwarder
+    assert update.new_forwarder == EMPTY_ADDRESS
 
 
 def test_set_forwarder_address_unauthorized(cre_receiver):
@@ -48,12 +55,16 @@ def test_set_expected_author(cre_receiver, dev_deployer):
 
     events = cre_receiver.get_logs()
     assert cre_receiver.expected_author() == author
-    assert any("ExpectedAuthorUpdated" in str(e) for e in events)
+    assert _last_event(events, "ExpectedAuthorUpdated").new_author == author
 
     with boa.env.prank(dev_deployer):
         cre_receiver.set_expected_author(EMPTY_ADDRESS)
 
+    events = cre_receiver.get_logs()
     assert cre_receiver.expected_author() == EMPTY_ADDRESS
+    update = _last_event(events, "ExpectedAuthorUpdated")
+    assert update.previous_author == author
+    assert update.new_author == EMPTY_ADDRESS
 
 
 def test_set_expected_author_unauthorized(cre_receiver):
@@ -73,12 +84,16 @@ def test_set_expected_workflow_id(cre_receiver, dev_deployer):
 
     events = cre_receiver.get_logs()
     assert cre_receiver.expected_workflow_id() == workflow_id
-    assert any("ExpectedWorkflowIdUpdated" in str(e) for e in events)
+    assert _last_event(events, "ExpectedWorkflowIdUpdated").new_id == workflow_id
 
     with boa.env.prank(dev_deployer):
         cre_receiver.set_expected_workflow_id(bytes(32))
 
+    events = cre_receiver.get_logs()
     assert cre_receiver.expected_workflow_id() == bytes(32)
+    update = _last_event(events, "ExpectedWorkflowIdUpdated")
+    assert update.previous_id == workflow_id
+    assert update.new_id == bytes(32)
 
 
 def test_set_expected_workflow_id_unauthorized(cre_receiver):
@@ -99,7 +114,7 @@ def test_set_expected_workflow_name(cre_receiver, dev_deployer):
 
     events = cre_receiver.get_logs()
     assert cre_receiver.expected_workflow_name() == expected_bytes10
-    assert any("ExpectedWorkflowNameUpdated" in str(e) for e in events)
+    assert _last_event(events, "ExpectedWorkflowNameUpdated").new_name == expected_bytes10
 
 
 def test_set_expected_workflow_name_empty_clears(cre_receiver, dev_deployer):
@@ -112,7 +127,11 @@ def test_set_expected_workflow_name_empty_clears(cre_receiver, dev_deployer):
     with boa.env.prank(dev_deployer):
         cre_receiver.set_expected_workflow_name("")
 
+    events = cre_receiver.get_logs()
     assert cre_receiver.expected_workflow_name() == bytes(10)
+    update = _last_event(events, "ExpectedWorkflowNameUpdated")
+    assert update.previous_name == compute_workflow_name_bytes("some_name")
+    assert update.new_name == bytes(10)
 
 
 def test_set_expected_workflow_name_max_length(cre_receiver, dev_deployer):

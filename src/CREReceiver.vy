@@ -113,7 +113,7 @@ def __init__(
     self.forwarder_address = _forwarder_address
     log ForwarderAddressUpdated(
         previous_forwarder=empty(address),
-        new_forwarder=self.forwarder_address,
+        new_forwarder=_forwarder_address,
     )
 
 
@@ -144,7 +144,7 @@ def set_forwarder_address(
     self.forwarder_address = _forwarder_address
     log ForwarderAddressUpdated(
         previous_forwarder=previous_forwarder,
-        new_forwarder=self.forwarder_address,
+        new_forwarder=_forwarder_address,
     )
 
 
@@ -163,7 +163,7 @@ def set_expected_author(
     self.expected_author = _expected_author
     log ExpectedAuthorUpdated(
         previous_author=previous_author,
-        new_author=self.expected_author,
+        new_author=_expected_author,
     )
 
 
@@ -190,7 +190,7 @@ def set_expected_workflow_name(
         self.expected_workflow_name = empty(bytes10)
         log ExpectedWorkflowNameUpdated(
             previous_name=previous_workflow_name,
-            new_name = self.expected_workflow_name
+            new_name=empty(bytes10),
         )
         return
 
@@ -202,7 +202,7 @@ def set_expected_workflow_name(
 
     log ExpectedWorkflowNameUpdated(
         previous_name=previous_workflow_name,
-        new_name = self.expected_workflow_name
+        new_name=first_10,
     )
 
 
@@ -221,7 +221,7 @@ def set_expected_workflow_id(
     self.expected_workflow_id = _expected_workflow_id
     log ExpectedWorkflowIdUpdated(
         previous_id=previous_workflow_id,
-        new_id=self.expected_workflow_id,
+        new_id=_expected_workflow_id,
     )
 
 
