@@ -64,6 +64,10 @@ event SetReceiver:
     destination_chain_selector: indexed(uint64)
     receiver: address
 
+event SetSender:
+    source_chain_selector: indexed(uint64)
+    sender: address
+
 event CCIPSecurityWarning:
     message: String[64]
 
@@ -122,11 +126,6 @@ struct Any2EVMMessage:
 struct GenericExtraArgsV2:
     gas_limit: uint256
     allow_out_of_order_execution: bool
-
-event SetSender:
-    source_chain_selector: indexed(uint64)
-    sender: address
-
 
 router: public(address)
 selector_to_receiver: public(HashMap[uint64, address])
@@ -242,7 +241,7 @@ def _quote(_destination_chain_selector: uint64, message: EVM2AnyMessage, allow_u
 
 @internal
 @pure
-def build_extra_args(gas_limit: uint256) -> Bytes[MAX_EXTRA_ARGS_SIZE]:
+def _build_extra_args(gas_limit: uint256) -> Bytes[MAX_EXTRA_ARGS_SIZE]:
     # allow_out_of_order_execution is always True: in-order execution is being
     # deprecated by CCIP in early 2026.
     # https://docs.chain.link/ccip/concepts/best-practices/evm#setting-allowoutoforderexecution
@@ -254,11 +253,19 @@ def build_extra_args(gas_limit: uint256) -> Bytes[MAX_EXTRA_ARGS_SIZE]:
 
 
 
+@view
 @internal
-@pure
-def build_simple_message(receiver: address, data: Bytes[MAX_DATA_SIZE], extra_args: Bytes[MAX_EXTRA_ARGS_SIZE]) -> EVM2AnyMessage:
+def _build_simple_message(
+    _destination_chain_selector: uint64,
+    data: Bytes[MAX_DATA_SIZE],
+    extra_args: Bytes[MAX_EXTRA_ARGS_SIZE]
+) -> EVM2AnyMessage:
+    """
+    @notice Build a native-fee, token-free message to the registered receiver
+    @dev Reverts if no receiver is registered for the destination chain
+    """
     message: EVM2AnyMessage = EVM2AnyMessage(
-            receiver=abi_encode(receiver),
+            receiver=abi_encode(self._get_receiver_or_revert(_destination_chain_selector)),
             data=data,
             token_amounts=empty(DynArray[EVMTokenAmount, MAX_TOKENS_PER_MESSAGE]),
             fee_token=empty(address),
@@ -283,7 +290,7 @@ def _set_receiver(_destination_chain_selector: uint64, _receiver: address):
 def _set_sender(_source_chain_selector: uint64, _sender: address):
     """
     @notice Set the sender for cross chain transactions
-    @param _source_chain_selector The unique CCIP sorce chain selector
+    @param _source_chain_selector The unique CCIP source chain selector
     @param _sender The address on the source chain to receive messages from
     """
 

@@ -67,13 +67,16 @@ def test_build_extra_args(ccip_module):
     assert len(extra_args) == 68
 
 
-def test_build_simple_message(ccip_module):
-    """build_simple_message constructs a valid EVM2AnyMessage with no token amounts."""
+def test_build_simple_message(ccip_module, dev_deployer):
+    """build_simple_message targets the registered receiver, with no token amounts."""
+    selector = 111
     receiver = boa.env.generate_address()
+    with boa.env.prank(dev_deployer):
+        ccip_module.set_receiver(selector, receiver)
     data = boa.util.abi.abi_encode("(uint256,bytes32)", (12345, bytes(32)))
     extra_args = ccip_module.build_extra_args(CCIP_RECEIVE_GAS_LIMIT)
 
-    message = ccip_module.build_simple_message(receiver, data, extra_args)
+    message = ccip_module.build_simple_message(selector, data, extra_args)
 
     # receiver is the ABI-encoded (left-padded) address; token_amounts empty; native fee token
     assert message[0] == boa.util.abi.abi_encode("address", receiver)
@@ -82,11 +85,21 @@ def test_build_simple_message(ccip_module):
     assert message[3] == "0x" + "00" * 20
 
 
-def test_build_simple_message_max_data(ccip_module):
+def test_build_simple_message_no_receiver_reverts(ccip_module):
+    """build_simple_message reverts when no receiver is registered for the selector."""
+    extra_args = ccip_module.build_extra_args(CCIP_RECEIVE_GAS_LIMIT)
+
+    with boa.reverts("No receiver"):
+        ccip_module.build_simple_message(111, b"", extra_args)
+
+
+def test_build_simple_message_max_data(ccip_module, dev_deployer):
     """build_simple_message accepts a full MAX_DATA_SIZE (2048) payload."""
-    receiver = boa.env.generate_address()
+    selector = 111
+    with boa.env.prank(dev_deployer):
+        ccip_module.set_receiver(selector, boa.env.generate_address())
     data = b"\x11" * 2048
     extra_args = ccip_module.build_extra_args(CCIP_RECEIVE_GAS_LIMIT)
 
-    message = ccip_module.build_simple_message(receiver, data, extra_args)
+    message = ccip_module.build_simple_message(selector, data, extra_args)
     assert message[1] == data

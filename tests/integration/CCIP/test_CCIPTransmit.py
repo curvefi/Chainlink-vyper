@@ -6,18 +6,25 @@ from boa.contracts.event_decoder import RawLogEntry
 from conftest import BASE_CHAIN_SELECTOR, CCIP_RECEIVE_GAS_LIMIT
 
 
-def _build_test_message(ccip_module, receiver):
-    """Build a minimal EVM2AnyMessage for testing."""
+def _build_test_message(ccip_module, selector):
+    """Build a minimal EVM2AnyMessage to the receiver registered for `selector`."""
     data = boa.util.abi.abi_encode("(uint256,bytes32)", (12345, bytes(32)))
     extra_args = ccip_module.build_extra_args(CCIP_RECEIVE_GAS_LIMIT)
-    return ccip_module.build_simple_message(receiver, data, extra_args)
+    return ccip_module.build_simple_message(selector, data, extra_args)
+
+
+def _raw_message(ccip_module, receiver):
+    """Hand-built EVM2AnyMessage to any address, bypassing the builder's receiver lookup."""
+    data = boa.util.abi.abi_encode("(uint256,bytes32)", (12345, bytes(32)))
+    extra_args = ccip_module.build_extra_args(CCIP_RECEIVE_GAS_LIMIT)
+    return (boa.util.abi.abi_encode("address", receiver), data, [], "0x" + "00" * 20, extra_args)
 
 
 def test_transmit_no_receiver_reverts(ccip_module, dev_deployer):
     """_transmit reverts before any router call when the destination has no registered receiver."""
     selector = 111
     receiver = boa.env.generate_address()
-    message = _build_test_message(ccip_module, receiver)
+    message = _raw_message(ccip_module, receiver)
 
     # No set_receiver / set_peer for `selector` → getter reverts loudly
     with boa.reverts("No receiver"):
@@ -34,7 +41,7 @@ def test_transmit_receiver_mismatch_reverts(ccip_module, dev_deployer):
         ccip_module.set_receiver(selector, registered)
 
     # Message built for `other`, but `registered` is what's configured
-    message = _build_test_message(ccip_module, other)
+    message = _raw_message(ccip_module, other)
     with boa.reverts("Receiver mismatch"):
         ccip_module.transmit(selector, message, 0)
 
@@ -48,7 +55,7 @@ def test_transmit_deducts_fee_and_emits_ccip_event(ccip_module_mainnet, dev_depl
     with boa.env.prank(dev_deployer):
         ccip_module_mainnet.set_receiver(BASE_CHAIN_SELECTOR, receiver)
 
-    message = _build_test_message(ccip_module_mainnet, receiver)
+    message = _build_test_message(ccip_module_mainnet, BASE_CHAIN_SELECTOR)
     fee = ccip_module_mainnet.quote(BASE_CHAIN_SELECTOR, message)
 
     boa.env.set_balance(ccip_module_mainnet.address, fee)
@@ -78,7 +85,7 @@ def test_transmit_returns_message_id_and_actual_fee(ccip_module_mainnet, dev_dep
     with boa.env.prank(dev_deployer):
         ccip_module_mainnet.set_receiver(BASE_CHAIN_SELECTOR, receiver)
 
-    message = _build_test_message(ccip_module_mainnet, receiver)
+    message = _build_test_message(ccip_module_mainnet, BASE_CHAIN_SELECTOR)
     fee = ccip_module_mainnet.quote(BASE_CHAIN_SELECTOR, message)
 
     boa.env.set_balance(ccip_module_mainnet.address, fee)
@@ -97,7 +104,7 @@ def test_transmit_reverts_when_max_fee_below_live(ccip_module_mainnet, dev_deplo
     with boa.env.prank(dev_deployer):
         ccip_module_mainnet.set_receiver(BASE_CHAIN_SELECTOR, receiver)
 
-    message = _build_test_message(ccip_module_mainnet, receiver)
+    message = _build_test_message(ccip_module_mainnet, BASE_CHAIN_SELECTOR)
     fee = ccip_module_mainnet.quote(BASE_CHAIN_SELECTOR, message)
 
     boa.env.set_balance(ccip_module_mainnet.address, fee)
@@ -114,7 +121,7 @@ def test_transmit_insufficient_balance_reverts(ccip_module_mainnet, dev_deployer
     with boa.env.prank(dev_deployer):
         ccip_module_mainnet.set_receiver(BASE_CHAIN_SELECTOR, receiver)
 
-    message = _build_test_message(ccip_module_mainnet, receiver)
+    message = _build_test_message(ccip_module_mainnet, BASE_CHAIN_SELECTOR)
     fee = ccip_module_mainnet.quote(BASE_CHAIN_SELECTOR, message)
 
     boa.env.set_balance(ccip_module_mainnet.address, fee - 1)
@@ -134,7 +141,7 @@ def test_transmit_fake_selector_reverts(ccip_module_mainnet, dev_deployer):
 
     data = boa.util.abi.abi_encode("(uint256,bytes32)", (12345, bytes(32)))
     extra_args = ccip_module_mainnet.build_extra_args(CCIP_RECEIVE_GAS_LIMIT)
-    message = ccip_module_mainnet.build_simple_message(receiver, data, extra_args)
+    message = ccip_module_mainnet.build_simple_message(fake_selector, data, extra_args)
 
     boa.env.set_balance(ccip_module_mainnet.address, 10**18)
 

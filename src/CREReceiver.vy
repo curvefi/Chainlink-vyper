@@ -178,8 +178,9 @@ def set_expected_workflow_name(
          The workflow name uses only 40-bit truncation, making collision attacks feasible
          when used alone. However, since workflow names are unique per owner, validating
          both the name AND the author address provides adequate security.
-         You must call setExpectedAuthor() before or after calling this function.
-         The name is hashed using SHA256 and truncated to bytes10.
+         You must call set_expected_author() before or after calling this function.
+         Stored value: the first 10 lowercase hex characters of sha256(name), as ASCII
+         bytes (the forwarder's metadata encoding).
     """
     ownable._check_owner()
 
@@ -193,8 +194,7 @@ def set_expected_workflow_name(
         )
         return
 
-    # Convert workflow name to bytes10:
-    # SHA256 hash → hex encode → take first 10 chars → hex encode those chars
+    # sha256(name) -> first 5 bytes -> 10 lowercase hex chars -> their ASCII bytes
     name_hash: bytes32 = sha256(_expected_workflow_name)
     hex_string: String[10]  = self._bytes_to_hex_string(slice(abi_encode(name_hash), 0, 5))
     first_10: bytes10 = convert(convert(hex_string, Bytes[10]), bytes10)

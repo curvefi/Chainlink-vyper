@@ -15,7 +15,7 @@ def test_quote_fee_registered_peer(ccip_module_mainnet, dev_deployer):
 
     data = boa.util.abi.abi_encode("(uint256,bytes32)", (12345, bytes(32)))
     extra_args = ccip_module_mainnet.build_extra_args(CCIP_RECEIVE_GAS_LIMIT)
-    message = ccip_module_mainnet.build_simple_message(receiver, data, extra_args)
+    message = ccip_module_mainnet.build_simple_message(BASE_CHAIN_SELECTOR, data, extra_args)
 
     fee = ccip_module_mainnet.quote(BASE_CHAIN_SELECTOR, message)
     assert fee > 0
@@ -34,8 +34,8 @@ def test_quote_fee_two_chains(ccip_module_mainnet, dev_deployer):
     data = boa.util.abi.abi_encode("(uint256,bytes32)", (12345, bytes(32)))
     extra_args = ccip_module_mainnet.build_extra_args(CCIP_RECEIVE_GAS_LIMIT)
 
-    msg_base = ccip_module_mainnet.build_simple_message(receiver_base, data, extra_args)
-    msg_arb = ccip_module_mainnet.build_simple_message(receiver_arb, data, extra_args)
+    msg_base = ccip_module_mainnet.build_simple_message(BASE_CHAIN_SELECTOR, data, extra_args)
+    msg_arb = ccip_module_mainnet.build_simple_message(ARBITRUM_CHAIN_SELECTOR, data, extra_args)
 
     fee_base = ccip_module_mainnet.quote(BASE_CHAIN_SELECTOR, msg_base)
     fee_arb = ccip_module_mainnet.quote(ARBITRUM_CHAIN_SELECTOR, msg_arb)
@@ -56,7 +56,7 @@ def test_quote_fee_unsupported_chain_returns_zero_when_allowed(ccip_module_mainn
 
     data = boa.util.abi.abi_encode("(uint256,bytes32)", (12345, bytes(32)))
     extra_args = ccip_module_mainnet.build_extra_args(CCIP_RECEIVE_GAS_LIMIT)
-    message = ccip_module_mainnet.build_simple_message(receiver, data, extra_args)
+    message = ccip_module_mainnet.build_simple_message(fake_selector, data, extra_args)
 
     assert ccip_module_mainnet.quote(fake_selector, message, True) == 0
 
@@ -72,7 +72,7 @@ def test_quote_fee_unsupported_chain_reverts_by_default(ccip_module_mainnet, dev
 
     data = boa.util.abi.abi_encode("(uint256,bytes32)", (12345, bytes(32)))
     extra_args = ccip_module_mainnet.build_extra_args(CCIP_RECEIVE_GAS_LIMIT)
-    message = ccip_module_mainnet.build_simple_message(receiver, data, extra_args)
+    message = ccip_module_mainnet.build_simple_message(fake_selector, data, extra_args)
 
     with boa.reverts():
         ccip_module_mainnet.quote(fake_selector, message)
@@ -91,8 +91,8 @@ def test_quote_fee_higher_gas_costs_more(ccip_module_mainnet, dev_deployer):
     extra_low = ccip_module_mainnet.build_extra_args(50_000)
     extra_high = ccip_module_mainnet.build_extra_args(500_000)
 
-    msg_low = ccip_module_mainnet.build_simple_message(receiver, data, extra_low)
-    msg_high = ccip_module_mainnet.build_simple_message(receiver, data, extra_high)
+    msg_low = ccip_module_mainnet.build_simple_message(BASE_CHAIN_SELECTOR, data, extra_low)
+    msg_high = ccip_module_mainnet.build_simple_message(BASE_CHAIN_SELECTOR, data, extra_high)
 
     fee_low = ccip_module_mainnet.quote(BASE_CHAIN_SELECTOR, msg_low)
     fee_high = ccip_module_mainnet.quote(BASE_CHAIN_SELECTOR, msg_high)

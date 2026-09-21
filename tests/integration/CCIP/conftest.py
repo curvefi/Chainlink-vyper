@@ -78,16 +78,16 @@ def quote(_selector: uint64, _message: CCIP.EVM2AnyMessage, _allow_unsupported: 
 @pure
 @external
 def build_extra_args(_gas_limit: uint256) -> Bytes[68]:
-    return CCIP.build_extra_args(_gas_limit)
+    return CCIP._build_extra_args(_gas_limit)
 
-@pure
+@view
 @external
 def build_simple_message(
-    _receiver: address,
+    _selector: uint64,
     _data: Bytes[CCIP.MAX_DATA_SIZE],
     _extra_args: Bytes[68],
 ) -> CCIP.EVM2AnyMessage:
-    return CCIP.build_simple_message(_receiver, _data, _extra_args)
+    return CCIP._build_simple_message(_selector, _data, _extra_args)
 """
 
 
