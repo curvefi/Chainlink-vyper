@@ -6,6 +6,9 @@ import pytest
 # Real deployed contract addresses on Ethereum mainnet
 CCIP_ROUTER = "0x80226fc0Ee2b096224EeAc085Bb9a8cba1146f7D"
 
+# Mainnet LINK, as a non-native CCIP fee token
+LINK = "0x514910771AF9Ca656af840dff83E8264EcF986CA"
+
 # Real CCIP chain selectors for outbound tests (fake selectors cause the real router to revert)
 BASE_CHAIN_SELECTOR = 15971525489660198786  # Base mainnet
 ARBITRUM_CHAIN_SELECTOR = 4949039107694359620  # Arbitrum One mainnet

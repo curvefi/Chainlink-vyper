@@ -216,11 +216,14 @@ def _transmit(
     _max_fee: uint256
     ) -> (bytes32, uint256):
     """
-    @dev See https://docs.chain.link/ccip/supported-networks/mainnet for chain selectors
+    @dev Pays the fee in native currency only; the message must leave fee_token empty.
+         See https://docs.chain.link/ccip/supported-networks/mainnet for chain selectors
     """
     # Only transmit to a registered receiver, and only if the message targets it
     receiver: address = self._get_receiver_or_revert(_destination_chain_selector)
     assert abi_decode(_message.receiver, address) == receiver, "Receiver mismatch"
+    # Fees are forwarded as msg.value, so only native payment is supported
+    assert _message.fee_token == empty(address), "Native fee only"
 
     fee: uint256 = self._quote(_destination_chain_selector, _message, False)  # allow_unsupported
     assert fee <= _max_fee, "Too high fees"

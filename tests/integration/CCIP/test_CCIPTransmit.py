@@ -3,7 +3,7 @@
 import boa
 import pytest
 from boa.contracts.event_decoder import RawLogEntry
-from conftest import BASE_CHAIN_SELECTOR, CCIP_RECEIVE_GAS_LIMIT
+from conftest import BASE_CHAIN_SELECTOR, CCIP_RECEIVE_GAS_LIMIT, LINK
 
 
 def _build_test_message(ccip_module, selector):
@@ -44,6 +44,19 @@ def test_transmit_receiver_mismatch_reverts(ccip_module, dev_deployer):
     message = _raw_message(ccip_module, other)
     with boa.reverts("Receiver mismatch"):
         ccip_module.transmit(selector, message, 0)
+
+
+def test_transmit_non_native_fee_token_reverts(ccip_module, dev_deployer):
+    """_transmit refuses a message that selects an ERC20 fee token; it can only pay natively."""
+    selector = 111
+    receiver = boa.env.generate_address()
+    with boa.env.prank(dev_deployer):
+        ccip_module.set_receiver(selector, receiver)
+
+    message = list(_raw_message(ccip_module, receiver))
+    message[3] = LINK
+    with boa.reverts("Native fee only"):
+        ccip_module.transmit(selector, tuple(message), 0)
 
 
 @pytest.mark.mainnet
