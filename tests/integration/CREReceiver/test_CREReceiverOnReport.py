@@ -12,6 +12,22 @@ def test_on_report_no_forwarder_configured(cre_receiver):
             cre_receiver.onReport(encode_metadata(), b"")
 
 
+def test_on_report_rejects_value(cre_receiver, dev_deployer):
+    """onReport is nonpayable, as in Chainlink's IReceiver: attached ETH reverts even from the
+    forwarder with a valid identity."""
+    forwarder = boa.env.generate_address()
+    workflow_id = bytes.fromhex("ab" * 32)
+
+    with boa.env.prank(dev_deployer):
+        cre_receiver.set_forwarder_address(forwarder)
+        cre_receiver.set_expected_workflow_id(workflow_id)
+
+    boa.env.set_balance(forwarder, 1)
+    with boa.env.prank(forwarder):
+        with boa.reverts():
+            cre_receiver.onReport(encode_metadata(workflow_id=workflow_id), b"", value=1)
+
+
 def test_on_report_rejects_non_forwarder(cre_receiver, dev_deployer):
     """onReport reverts for any caller that is not the configured forwarder."""
     forwarder = boa.env.generate_address()

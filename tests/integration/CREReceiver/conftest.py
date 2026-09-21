@@ -36,6 +36,9 @@ def compute_workflow_name_bytes(name: str) -> bytes:
 _CRE_RECEIVER_WRAPPER = """
 from snekmate.auth import ownable
 from src import CREReceiver
+from src import IReceiver
+
+implements: IReceiver
 
 initializes: ownable
 initializes: CREReceiver[ownable:=ownable]
@@ -64,7 +67,6 @@ def __init__(_forwarder_address: address):
     CREReceiver.__init__(_forwarder_address)
 
 @external
-@payable
 def onReport(
     _metadata: Bytes[CREReceiver.MAX_METADATA_SIZE],
     _report: Bytes[CREReceiver.MAX_REPORT_SIZE],
@@ -72,7 +74,6 @@ def onReport(
     CREReceiver._on_report(_metadata, _report)
 
 @external
-@payable
 def on_report_non_strict(
     _metadata: Bytes[CREReceiver.MAX_METADATA_SIZE],
     _report: Bytes[CREReceiver.MAX_REPORT_SIZE],

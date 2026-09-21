@@ -89,7 +89,6 @@ def __init__(
 ################################################################
 
 @external
-@payable
 def onReport(metadata: Bytes[CREReceiver.MAX_METADATA_SIZE], report: Bytes[CREReceiver.MAX_REPORT_SIZE]):
     """
     @notice Called by CRE Forwarder via CREReceiver after metadata validation
