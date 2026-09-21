@@ -21,6 +21,16 @@ The module provides:
 Always ensure proper peer/forwarder setup and ownership management when deploying. Code
 has not been audited yet and probably contains bugs.
 
+### Integrating
+
+- Call `CCIP._ccipReceive` / `CREReceiver._on_report` first in your `ccipReceive` /
+  `onReport`, before decoding or acting on the payload.
+- `CCIP._transmit` calls the router; enable `# pragma nonreentrancy on` in the consuming
+  contract (and mark only deliberate ETH receivers `@reentrant`) so entry points that
+  reach it cannot be re-entered mid-update.
+- The modules authenticate the source only. Payload validity, freshness, replay
+  protection and ordering (CCIP out-of-order execution is always on) are the consumer's job.
+
 ## Development
 
 Requirements:
