@@ -49,7 +49,9 @@ struct WorkflowMetadataView:
 def getWorkflow(owner: address, workflow_name: String[MAX_NAME_SIZE], tag: String[MAX_NAME_SIZE]) -> WorkflowMetadataView:
     """
     @notice Look up a workflow by its exact owner + name + tag.
-    @dev Reverts if no such workflow is registered.
+    @dev Does not revert when nothing matches: an unknown or deleted workflow returns an
+         empty struct (workflow_id == empty(bytes32)). Check workflow_id before using it,
+         e.g. before CREReceiver.set_expected_workflow_id, where zero disables the check.
     """
     ...
 
@@ -59,7 +61,8 @@ def getWorkflow(owner: address, workflow_name: String[MAX_NAME_SIZE], tag: Strin
 def getWorkflowById(workflow_id: bytes32) -> WorkflowMetadataView:
     """
     @notice Look up a workflow by its ID.
-    @dev Reverts if the ID is not registered.
+    @dev Does not revert for an unknown or deleted ID: returns an empty struct
+         (workflow_id == empty(bytes32)).
     """
     ...
 
