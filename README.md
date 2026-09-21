@@ -30,6 +30,8 @@ has not been audited yet and probably contains bugs.
   reach it cannot be re-entered mid-update.
 - The modules authenticate the source only. Payload validity, freshness, replay
   protection and ordering (CCIP out-of-order execution is always on) are the consumer's job.
+- Keep `_on_report`'s default strict mode in production. `strict_mode=False` is for testing
+  only: with no workflow identity configured it accepts any workflow the forwarder delivers.
 - `IWorkflowRegistry` lookups return an empty struct, not a revert, for unknown workflows.
   Assert `workflow_id != empty(bytes32)` before passing it to `set_expected_workflow_id`:
   zero there disables the check rather than rejecting everything.

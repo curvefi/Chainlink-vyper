@@ -256,7 +256,12 @@ def _on_report(
     strict_mode: bool = True
 ):
     """
-    @dev Performs optional validation checks based on which permission fields are set
+    @notice Authenticate a CRE report: forwarder caller, then the configured workflow identity
+    @dev Call first in onReport, before decoding or acting on the report.
+    @param strict_mode True (default, and the only production setting): revert unless at least
+           one identity field (id, author) is configured. False is for testing only: with no
+           identity configured, any workflow delivered by the forwarder is accepted.
+           Configured fields are enforced in either mode.
     """
 
     # Security Check 1: Verify caller is the trusted Chainlink Forwarder
