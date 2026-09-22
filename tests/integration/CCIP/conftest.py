@@ -73,6 +73,15 @@ def ccipReceive(_message: CCIP.Any2EVMMessage):
 def transmit(_selector: uint64, _message: CCIP.EVM2AnyMessage, _max_fee: uint256) -> (bytes32, uint256):
     return CCIP._transmit(_selector, _message, _max_fee)
 
+@external
+def try_transmit(_selector: uint64, _message: CCIP.EVM2AnyMessage, _max_fee: uint256) -> (bool, bytes32, uint256):
+    return CCIP._try_transmit(_selector, _message, _max_fee)
+
+@pure
+@external
+def method_ids() -> (bytes4, bytes4):
+    return CCIP.GET_FEE_METHOD_ID, CCIP.CCIP_SEND_METHOD_ID
+
 @view
 @external
 def quote(_selector: uint64, _message: CCIP.EVM2AnyMessage, _allow_unsupported: bool = False) -> uint256:

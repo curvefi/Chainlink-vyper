@@ -2,6 +2,7 @@
 
 import boa
 import pytest
+from eth_utils import keccak
 from boa.contracts.event_decoder import RawLogEntry
 from conftest import BASE_CHAIN_SELECTOR, CCIP_RECEIVE_GAS_LIMIT, LINK
 
@@ -160,3 +161,60 @@ def test_transmit_fake_selector_reverts(ccip_module_mainnet, dev_deployer):
 
     with boa.reverts():
         ccip_module_mainnet.transmit(fake_selector, message, 10**14)
+
+
+# ─── _try_transmit ───────────────────────────────────────────────────────────
+
+
+@pytest.mark.mainnet
+def test_try_transmit_selectors_match_the_router_interface(ccip_module_mainnet, dev_deployer):
+    """_try_transmit calls the router by hand, so its selectors must match the typed interface.
+
+    Vyper takes method_id only as a literal string, and a stale one would quietly make every
+    destination look unreachable. The live router answers both paths here, so they must agree.
+    """
+    receiver = boa.env.generate_address()
+    with boa.env.prank(dev_deployer):
+        ccip_module_mainnet.set_receiver(BASE_CHAIN_SELECTOR, receiver)
+    message = _build_test_message(ccip_module_mainnet, BASE_CHAIN_SELECTOR)
+
+    # the hand-built getFee must price the message exactly as the interface does
+    fee = ccip_module_mainnet.quote(BASE_CHAIN_SELECTOR, message)
+    boa.env.set_balance(ccip_module_mainnet.address, fee)
+    sent, message_id, paid = ccip_module_mainnet.try_transmit(BASE_CHAIN_SELECTOR, message, fee)
+
+    assert sent is True
+    assert paid == fee
+    assert message_id != bytes(32)
+
+    get_fee_id, ccip_send_id = ccip_module_mainnet.method_ids()
+    assert (
+        get_fee_id == keccak(b"getFee(uint64,(bytes,bytes,(address,uint256)[],address,bytes))")[:4]
+    )
+    assert (
+        ccip_send_id
+        == keccak(b"ccipSend(uint64,(bytes,bytes,(address,uint256)[],address,bytes))")[:4]
+    )
+
+
+@pytest.mark.mainnet
+def test_try_transmit_reports_what_the_router_refuses(ccip_module_mainnet, dev_deployer):
+    """An unsupported chain, a fee over the cap and a fee over the balance are reported, not raised."""
+    receiver = boa.env.generate_address()
+    fake_selector = 111
+    with boa.env.prank(dev_deployer):
+        ccip_module_mainnet.set_receiver(BASE_CHAIN_SELECTOR, receiver)
+        ccip_module_mainnet.set_receiver(fake_selector, receiver)
+
+    message = _build_test_message(ccip_module_mainnet, BASE_CHAIN_SELECTOR)
+    fee = ccip_module_mainnet.quote(BASE_CHAIN_SELECTOR, message)
+    boa.env.set_balance(ccip_module_mainnet.address, fee)
+
+    # the router does not serve this chain, so even its quote reverts
+    unsupported = _build_test_message(ccip_module_mainnet, fake_selector)
+    assert ccip_module_mainnet.try_transmit(fake_selector, unsupported, fee)[0] is False
+    # cap below the live fee
+    assert ccip_module_mainnet.try_transmit(BASE_CHAIN_SELECTOR, message, fee - 1)[0] is False
+    # balance below the live fee
+    boa.env.set_balance(ccip_module_mainnet.address, fee - 1)
+    assert ccip_module_mainnet.try_transmit(BASE_CHAIN_SELECTOR, message, fee)[0] is False

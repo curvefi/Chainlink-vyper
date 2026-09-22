@@ -80,6 +80,14 @@ event CCIPSecurityWarning:
 
 GENERIC_EXTRA_ARGS_V2_TAG: constant(bytes4) = 0x181dcf10
 
+# Signatures _try_transmit calls by hand; pinned against the Router interface by a fork test
+GET_FEE_METHOD_ID: constant(bytes4) = method_id(
+    "getFee(uint64,(bytes,bytes,(address,uint256)[],address,bytes))", output_type=bytes4
+)
+CCIP_SEND_METHOD_ID: constant(bytes4) = method_id(
+    "ccipSend(uint64,(bytes,bytes,(address,uint256)[],address,bytes))", output_type=bytes4
+)
+
 # This library's compile-time payload cap. CCIP itself allows up to 30 KB
 # (https://docs.chain.link/ccip/service-limits/evm); 2048 is a deliberately narrower limit here.
 MAX_DATA_SIZE: constant(uint256) = 2048
@@ -230,6 +238,56 @@ def _transmit(
     assert fee <= _max_fee, "Too high fees"
     message_id: bytes32 = extcall Router(self.router).ccipSend(_destination_chain_selector, _message, value=fee)
     return message_id, fee
+
+
+@internal
+def _try_transmit(
+    _destination_chain_selector: uint64,
+    _message: EVM2AnyMessage,
+    _max_fee: uint256
+    ) -> (bool, bytes32, uint256):
+    """
+    @notice Best-effort _transmit: a destination the router refuses is reported, not raised
+    @dev Anything the router refuses (unsupported chain, paused lane, fee over _max_fee or over
+         this contract's balance) returns success=False; misconfiguration on this side still reverts
+    @return (success, message id, fee paid)
+    """
+    # Only transmit to a registered receiver, and only if the message targets it
+    receiver: address = self._get_receiver_or_revert(_destination_chain_selector)
+    assert abi_decode(_message.receiver, address) == receiver, "Receiver mismatch"
+    # Fees are forwarded as msg.value, so only native payment is supported
+    assert _message.fee_token == empty(address), "Native fee only"
+
+    # raw_call, not the interface: getFee itself reverts for a chain the router will not serve
+    quote_ok: bool = False
+    quote: Bytes[32] = b""
+    quote_ok, quote = raw_call(
+        self.router,
+        abi_encode(_destination_chain_selector, _message, method_id=GET_FEE_METHOD_ID),
+        max_outsize=32,
+        is_static_call=True,
+        revert_on_failure=False,
+    )
+    if not quote_ok or len(quote) != 32:
+        return False, empty(bytes32), 0
+
+    fee: uint256 = abi_decode(quote, uint256)
+    if fee > _max_fee or fee > self.balance:
+        return False, empty(bytes32), 0
+
+    send_ok: bool = False
+    sent: Bytes[32] = b""
+    send_ok, sent = raw_call(
+        self.router,
+        abi_encode(_destination_chain_selector, _message, method_id=CCIP_SEND_METHOD_ID),
+        max_outsize=32,
+        value=fee,
+        revert_on_failure=False,
+    )
+    if not send_ok or len(sent) != 32:
+        return False, empty(bytes32), 0
+
+    return True, abi_decode(sent, bytes32), fee
 
 
 @view
