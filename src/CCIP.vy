@@ -250,6 +250,8 @@ def _try_transmit(
     @notice Best-effort _transmit: a destination the router refuses is reported, not raised
     @dev Anything the router refuses (unsupported chain, paused lane, fee over _max_fee or over
          this contract's balance) returns success=False; misconfiguration on this side still reverts
+    @dev A ccipSend that runs out of gas is indistinguishable from a refusal, so budget gas per
+         destination rather than relying on a retry
     @return (success, message id, fee paid)
     """
     # Only transmit to a registered receiver, and only if the message targets it
