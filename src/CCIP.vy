@@ -250,8 +250,8 @@ def _try_transmit(
     @notice Best-effort _transmit: a destination the router refuses is reported, not raised
     @dev Anything the router refuses (unsupported chain, paused lane, fee over _max_fee or over
          this contract's balance) returns success=False; misconfiguration on this side still reverts
-    @dev A ccipSend that runs out of gas is indistinguishable from a refusal, so budget gas per
-         destination rather than relying on a retry
+    @dev A call starved of gas reverts rather than being reported as a refusal: a refusal hands most
+         of its gas back, a starved call keeps only the 1/64 that EIP-150 reserves
     @return (success, message id, fee paid)
     """
     # Only transmit to a registered receiver, and only if the message targets it
@@ -263,6 +263,7 @@ def _try_transmit(
     # raw_call, not the interface: getFee itself reverts for a chain the router will not serve
     quote_ok: bool = False
     quote: Bytes[32] = b""
+    gas_before: uint256 = msg.gas
     quote_ok, quote = raw_call(
         self.router,
         abi_encode(_destination_chain_selector, _message, method_id=GET_FEE_METHOD_ID),
@@ -270,6 +271,8 @@ def _try_transmit(
         is_static_call=True,
         revert_on_failure=False,
     )
+    if not quote_ok:
+        assert msg.gas > gas_before // 32, "getFee ran out of gas"
     if not quote_ok or len(quote) != 32:
         return False, empty(bytes32), 0
 
@@ -279,6 +282,7 @@ def _try_transmit(
 
     send_ok: bool = False
     sent: Bytes[32] = b""
+    gas_before = msg.gas
     send_ok, sent = raw_call(
         self.router,
         abi_encode(_destination_chain_selector, _message, method_id=CCIP_SEND_METHOD_ID),
@@ -286,6 +290,8 @@ def _try_transmit(
         value=fee,
         revert_on_failure=False,
     )
+    if not send_ok:
+        assert msg.gas > gas_before // 32, "ccipSend ran out of gas"
     if not send_ok or len(sent) != 32:
         return False, empty(bytes32), 0
 

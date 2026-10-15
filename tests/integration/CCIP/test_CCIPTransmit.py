@@ -3,6 +3,7 @@
 import boa
 import pytest
 from eth_utils import keccak
+from boa.contracts.base_evm_contract import BoaError
 from boa.contracts.event_decoder import RawLogEntry
 from conftest import BASE_CHAIN_SELECTOR, CCIP_RECEIVE_GAS_LIMIT, LINK
 
@@ -218,3 +219,28 @@ def test_try_transmit_reports_what_the_router_refuses(ccip_module_mainnet, dev_d
     # balance below the live fee
     boa.env.set_balance(ccip_module_mainnet.address, fee - 1)
     assert ccip_module_mainnet.try_transmit(BASE_CHAIN_SELECTOR, message, fee)[0] is False
+
+
+@pytest.mark.mainnet
+def test_try_transmit_never_reports_a_starved_send_as_a_refusal(ccip_module_mainnet, dev_deployer):
+    """Whoever submits the transaction picks its gas. A valid destination starved of gas must revert,
+    so the delivery stays retryable, rather than come back False and be skipped as a refusal."""
+    receiver = boa.env.generate_address()
+    with boa.env.prank(dev_deployer):
+        ccip_module_mainnet.set_receiver(BASE_CHAIN_SELECTOR, receiver)
+    message = _build_test_message(ccip_module_mainnet, BASE_CHAIN_SELECTOR)
+    fee = ccip_module_mainnet.quote(BASE_CHAIN_SELECTOR, message)
+
+    outcomes = set()
+    for gas in range(60_000, 400_000, 5_000):
+        boa.env.set_balance(ccip_module_mainnet.address, fee)
+        try:
+            sent = ccip_module_mainnet.try_transmit(BASE_CHAIN_SELECTOR, message, fee, gas=gas)[0]
+        except BoaError:
+            outcomes.add("reverted")
+            continue
+        assert sent is True, f"a valid destination came back as a refusal at gas={gas}"
+        outcomes.add("sent")
+
+    # the sweep must actually cross from starved to sufficient, or it proves nothing
+    assert outcomes == {"reverted", "sent"}
