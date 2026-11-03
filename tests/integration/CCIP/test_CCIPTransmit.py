@@ -5,7 +5,7 @@ import pytest
 from eth_utils import keccak
 from boa.contracts.base_evm_contract import BoaError
 from boa.contracts.event_decoder import RawLogEntry
-from conftest import BASE_CHAIN_SELECTOR, CCIP_RECEIVE_GAS_LIMIT, LINK
+from conftest import BASE_CHAIN_SELECTOR, CCIP_CALL_GAS, CCIP_RECEIVE_GAS_LIMIT, LINK
 
 
 def _build_test_message(ccip_module, selector):
@@ -182,7 +182,9 @@ def test_try_transmit_selectors_match_the_router_interface(ccip_module_mainnet, 
     # the hand-built getFee must price the message exactly as the interface does
     fee = ccip_module_mainnet.quote(BASE_CHAIN_SELECTOR, message)
     boa.env.set_balance(ccip_module_mainnet.address, fee)
-    sent, message_id, paid = ccip_module_mainnet.try_transmit(BASE_CHAIN_SELECTOR, message, fee)
+    sent, message_id, paid = ccip_module_mainnet.try_transmit(
+        BASE_CHAIN_SELECTOR, message, fee, CCIP_CALL_GAS
+    )
 
     assert sent is True
     assert paid == fee
@@ -213,12 +215,20 @@ def test_try_transmit_reports_what_the_router_refuses(ccip_module_mainnet, dev_d
 
     # the router does not serve this chain, so even its quote reverts
     unsupported = _build_test_message(ccip_module_mainnet, fake_selector)
-    assert ccip_module_mainnet.try_transmit(fake_selector, unsupported, fee)[0] is False
+    assert (
+        ccip_module_mainnet.try_transmit(fake_selector, unsupported, fee, CCIP_CALL_GAS)[0] is False
+    )
     # cap below the live fee
-    assert ccip_module_mainnet.try_transmit(BASE_CHAIN_SELECTOR, message, fee - 1)[0] is False
+    assert (
+        ccip_module_mainnet.try_transmit(BASE_CHAIN_SELECTOR, message, fee - 1, CCIP_CALL_GAS)[0]
+        is False
+    )
     # balance below the live fee
     boa.env.set_balance(ccip_module_mainnet.address, fee - 1)
-    assert ccip_module_mainnet.try_transmit(BASE_CHAIN_SELECTOR, message, fee)[0] is False
+    assert (
+        ccip_module_mainnet.try_transmit(BASE_CHAIN_SELECTOR, message, fee, CCIP_CALL_GAS)[0]
+        is False
+    )
 
 
 @pytest.mark.mainnet
@@ -232,10 +242,12 @@ def test_try_transmit_never_reports_a_starved_send_as_a_refusal(ccip_module_main
     fee = ccip_module_mainnet.quote(BASE_CHAIN_SELECTOR, message)
 
     outcomes = set()
-    for gas in range(60_000, 400_000, 5_000):
+    for gas in range(60_000, 800_000, 5_000):
         boa.env.set_balance(ccip_module_mainnet.address, fee)
         try:
-            sent = ccip_module_mainnet.try_transmit(BASE_CHAIN_SELECTOR, message, fee, gas=gas)[0]
+            sent = ccip_module_mainnet.try_transmit(
+                BASE_CHAIN_SELECTOR, message, fee, CCIP_CALL_GAS, gas=gas
+            )[0]
         except BoaError:
             outcomes.add("reverted")
             continue
@@ -244,3 +256,79 @@ def test_try_transmit_never_reports_a_starved_send_as_a_refusal(ccip_module_main
 
     # the sweep must actually cross from starved to sufficient, or it proves nothing
     assert outcomes == {"reverted", "sent"}
+
+
+@pytest.mark.mainnet
+def test_try_transmit_refusal_depends_on_the_budget_not_the_callers_gas(
+    ccip_module_mainnet, dev_deployer
+):
+    """A budget too small for the router is a refusal at every caller gas, never a starved send;
+    a caller that cannot fund the budget reverts instead."""
+    receiver = boa.env.generate_address()
+    with boa.env.prank(dev_deployer):
+        ccip_module_mainnet.set_receiver(BASE_CHAIN_SELECTOR, receiver)
+    message = _build_test_message(ccip_module_mainnet, BASE_CHAIN_SELECTOR)
+    fee = ccip_module_mainnet.quote(BASE_CHAIN_SELECTOR, message)
+    too_small = 50_000
+
+    outcomes = set()
+    for gas in range(60_000, 400_000, 10_000):
+        boa.env.set_balance(ccip_module_mainnet.address, fee)
+        try:
+            sent = ccip_module_mainnet.try_transmit(
+                BASE_CHAIN_SELECTOR, message, fee, too_small, gas=gas
+            )[0]
+        except BoaError:
+            outcomes.add("reverted")
+            continue
+        outcomes.add("sent" if sent else "refused")
+
+    assert outcomes == {"reverted", "refused"}
+    with boa.reverts("Not enough gas to transmit"):
+        ccip_module_mainnet.try_transmit(
+            BASE_CHAIN_SELECTOR, message, fee, CCIP_CALL_GAS, gas=300_000
+        )
+
+
+_GAS_ECHO_ROUTER = """
+from src import CCIP
+
+@view
+@external
+def getFee(_selector: uint64, _message: CCIP.EVM2AnyMessage) -> uint256:
+    return msg.gas
+
+@payable
+@external
+def ccipSend(_selector: uint64, _message: CCIP.EVM2AnyMessage) -> bytes32:
+    return convert(msg.gas, bytes32)
+"""
+
+
+def test_try_transmit_forwards_the_whole_budget_whenever_it_calls(ccip_module, dev_deployer):
+    """ROUTER_CALL_COST must cover the call's own cost, or at the edge of the pre-check the router
+    gets less than _call_gas and a starved send passes for a refusal."""
+    router = boa.loads(_GAS_ECHO_ROUTER)  # answers with the gas it received
+    with boa.env.prank(dev_deployer):
+        ccip_module.set_router(router.address)
+        ccip_module.set_receiver(BASE_CHAIN_SELECTOR, boa.env.generate_address())
+    message = _build_test_message(ccip_module, BASE_CHAIN_SELECTOR)
+    boa.env.set_balance(ccip_module.address, 10**18)
+
+    def received(gas):
+        _, message_id, fee = ccip_module.try_transmit(
+            BASE_CHAIN_SELECTOR, message, 10**18, CCIP_CALL_GAS, gas=gas
+        )
+        return fee, message_id
+
+    # the least caller gas the pre-checks let through
+    lo, hi = 0, 5_000_000
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        try:
+            received(mid)
+            hi = mid
+        except BoaError:
+            lo = mid
+
+    assert received(hi) == received(5_000_000)

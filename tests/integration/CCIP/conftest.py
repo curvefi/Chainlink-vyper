@@ -15,6 +15,8 @@ ARBITRUM_CHAIN_SELECTOR = 4949039107694359620  # Arbitrum One mainnet
 
 # Default gas limit for ccipReceive on destination chain
 CCIP_RECEIVE_GAS_LIMIT = 150_000
+# Gas _try_transmit gives each router call; ~190k needed cold
+CCIP_CALL_GAS = 500_000
 
 EMPTY_ADDRESS = boa.eval("empty(address)")
 
@@ -74,8 +76,8 @@ def transmit(_selector: uint64, _message: CCIP.EVM2AnyMessage, _max_fee: uint256
     return CCIP._transmit(_selector, _message, _max_fee)
 
 @external
-def try_transmit(_selector: uint64, _message: CCIP.EVM2AnyMessage, _max_fee: uint256) -> (bool, bytes32, uint256):
-    return CCIP._try_transmit(_selector, _message, _max_fee)
+def try_transmit(_selector: uint64, _message: CCIP.EVM2AnyMessage, _max_fee: uint256, _call_gas: uint256) -> (bool, bytes32, uint256):
+    return CCIP._try_transmit(_selector, _message, _max_fee, _call_gas)
 
 @pure
 @external

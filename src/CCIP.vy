@@ -88,6 +88,9 @@ CCIP_SEND_METHOD_ID: constant(bytes4) = method_id(
     "ccipSend(uint64,(bytes,bytes,(address,uint256)[],address,bytes))", output_type=bytes4
 )
 
+# A router call's own cost beyond its gas budget: cold access, value transfer and encoding
+ROUTER_CALL_COST: constant(uint256) = 25_000
+
 # This library's compile-time payload cap. CCIP itself allows up to 30 KB
 # (https://docs.chain.link/ccip/service-limits/evm); 2048 is a deliberately narrower limit here.
 MAX_DATA_SIZE: constant(uint256) = 2048
@@ -244,14 +247,16 @@ def _transmit(
 def _try_transmit(
     _destination_chain_selector: uint64,
     _message: EVM2AnyMessage,
-    _max_fee: uint256
+    _max_fee: uint256,
+    _call_gas: uint256,
     ) -> (bool, bytes32, uint256):
     """
     @notice Best-effort _transmit: a destination the router refuses is reported, not raised
     @dev Anything the router refuses (unsupported chain, paused lane, fee over _max_fee or over
          this contract's balance) returns success=False; misconfiguration on this side still reverts
-    @dev A call starved of gas reverts rather than being reported as a refusal: a refusal hands most
-         of its gas back, a starved call keeps only the 1/64 that EIP-150 reserves
+    @dev Each router call gets exactly _call_gas or the whole call reverts, so a failure is a
+         refusal, never starvation; _call_gas must cover the call on every target chain
+    @param _call_gas Gas for getFee and for ccipSend, each
     @return (success, message id, fee paid)
     """
     # Only transmit to a registered receiver, and only if the message targets it
@@ -263,16 +268,15 @@ def _try_transmit(
     # raw_call, not the interface: getFee itself reverts for a chain the router will not serve
     quote_ok: bool = False
     quote: Bytes[32] = b""
-    gas_before: uint256 = msg.gas
+    assert msg.gas > _call_gas * 64 // 63 + ROUTER_CALL_COST, "Not enough gas to transmit"
     quote_ok, quote = raw_call(
         self.router,
         abi_encode(_destination_chain_selector, _message, method_id=GET_FEE_METHOD_ID),
         max_outsize=32,
+        gas=_call_gas,
         is_static_call=True,
         revert_on_failure=False,
     )
-    if not quote_ok:
-        assert msg.gas > gas_before // 32, "getFee ran out of gas"
     if not quote_ok or len(quote) != 32:
         return False, empty(bytes32), 0
 
@@ -282,16 +286,15 @@ def _try_transmit(
 
     send_ok: bool = False
     sent: Bytes[32] = b""
-    gas_before = msg.gas
+    assert msg.gas > _call_gas * 64 // 63 + ROUTER_CALL_COST, "Not enough gas to transmit"
     send_ok, sent = raw_call(
         self.router,
         abi_encode(_destination_chain_selector, _message, method_id=CCIP_SEND_METHOD_ID),
         max_outsize=32,
+        gas=_call_gas,
         value=fee,
         revert_on_failure=False,
     )
-    if not send_ok:
-        assert msg.gas > gas_before // 32, "ccipSend ran out of gas"
     if not send_ok or len(sent) != 32:
         return False, empty(bytes32), 0
 
