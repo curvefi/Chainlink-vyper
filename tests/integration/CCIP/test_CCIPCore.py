@@ -1,7 +1,15 @@
 """Test CCIP module core: initialization, router management, and interface support."""
 
 import boa
-from conftest import CCIP_ROUTER, CCIP_RECEIVE_GAS_LIMIT, EMPTY_ADDRESS, _CCIP_WRAPPER
+from conftest import (
+    CCIP_ROUTER,
+    CCIP_RECEIVE_GAS_LIMIT,
+    EMPTY_ADDRESS,
+    INITIAL_ROUTER_CALL_GAS,
+    MIN_ROUTER_CALL_COST,
+    MIN_ROUTER_CALL_GAS,
+    _CCIP_WRAPPER,
+)
 
 
 def test_initialization(ccip_module, dev_deployer):
@@ -48,6 +56,29 @@ def test_set_router_zero_emits_warning(ccip_module, dev_deployer):
     events = ccip_module.get_logs()
     assert ccip_module.router() == EMPTY_ADDRESS
     assert any("CCIPSecurityWarning" in str(e) for e in events)
+
+
+def test_set_router_call_gas(ccip_module, dev_deployer):
+    """Starts at the measured values; only the owner retunes it, never below the floors."""
+    assert ccip_module.router_call_gas() == INITIAL_ROUTER_CALL_GAS
+    assert ccip_module.router_call_cost() == MIN_ROUTER_CALL_COST
+
+    with boa.env.prank(boa.env.generate_address()):
+        with boa.reverts("ownable: caller is not the owner"):
+            ccip_module.set_router_call_gas(600_000, 30_000)
+
+    with boa.env.prank(dev_deployer):
+        with boa.reverts("Call gas too low"):
+            ccip_module.set_router_call_gas(MIN_ROUTER_CALL_GAS - 1, MIN_ROUTER_CALL_COST)
+        with boa.reverts("Call cost too low"):
+            ccip_module.set_router_call_gas(MIN_ROUTER_CALL_GAS, MIN_ROUTER_CALL_COST - 1)
+        ccip_module.set_router_call_gas(MIN_ROUTER_CALL_GAS, MIN_ROUTER_CALL_COST)
+        ccip_module.set_router_call_gas(600_000, 30_000)
+
+    events = ccip_module.get_logs()
+    assert ccip_module.router_call_gas() == 600_000
+    assert ccip_module.router_call_cost() == 30_000
+    assert any("SetRouterCallGas" in str(e) for e in events)
 
 
 def test_supports_interface(ccip_module):

@@ -61,6 +61,10 @@ interface Router:
 event SetRouter:
     router: address
 
+event SetRouterCallGas:
+    call_gas: uint256
+    call_cost: uint256
+
 event SetReceiver:
     destination_chain_selector: indexed(uint64)
     receiver: address
@@ -88,8 +92,13 @@ CCIP_SEND_METHOD_ID: constant(bytes4) = method_id(
     "ccipSend(uint64,(bytes,bytes,(address,uint256)[],address,bytes))", output_type=bytes4
 )
 
-# A router call's own cost beyond its gas budget: cold access, value transfer and encoding
-ROUTER_CALL_COST: constant(uint256) = 25_000
+# Gas each _try_transmit router call gets: ~190k cold today, ~420k worst case under Glamsterdam
+INITIAL_ROUTER_CALL_GAS: constant(uint256) = 500_000
+# Above what one router call needs today; may not cover Glamsterdam's worst case
+MIN_ROUTER_CALL_GAS: constant(uint256) = 250_000
+# A router call's own cost beyond its gas: cold access, value transfer and encoding.
+# Measured to cover it; lower lets a call start short of its gas
+MIN_ROUTER_CALL_COST: constant(uint256) = 25_000
 
 # This library's compile-time payload cap. CCIP itself allows up to 30 KB
 # (https://docs.chain.link/ccip/service-limits/evm); 2048 is a deliberately narrower limit here.
@@ -140,6 +149,9 @@ struct GenericExtraArgsV2:
     allow_out_of_order_execution: bool
 
 router: public(address)
+# On-chain so they retune without a redeploy
+router_call_gas: public(uint256)
+router_call_cost: public(uint256)
 selector_to_receiver: public(HashMap[uint64, address])
 selector_to_sender: public(HashMap[uint64, address])
 
@@ -156,6 +168,8 @@ def __init__(_ccip_router: address):
         log CCIPSecurityWarning(message="CCIP is disabled")
     self.router = _ccip_router
     log SetRouter(router=_ccip_router)
+    self.router_call_gas = INITIAL_ROUTER_CALL_GAS
+    self.router_call_cost = MIN_ROUTER_CALL_COST
 
 
 ################################################################
@@ -176,6 +190,21 @@ def set_router(_ccip_router: address):
         log CCIPSecurityWarning(message="CCIP is disabled")
     self.router = _ccip_router
     log SetRouter(router=_ccip_router)
+
+
+@external
+def set_router_call_gas(_call_gas: uint256, _call_cost: uint256):
+    """
+    @notice Set the gas each _try_transmit router call gets, and that call's own cost beyond it
+    @dev Raising _call_gas raises the gas a transmitting caller needs
+    """
+    ownable._check_owner()
+
+    assert _call_gas >= MIN_ROUTER_CALL_GAS, "Call gas too low"
+    assert _call_cost >= MIN_ROUTER_CALL_COST, "Call cost too low"
+    self.router_call_gas = _call_gas
+    self.router_call_cost = _call_cost
+    log SetRouterCallGas(call_gas=_call_gas, call_cost=_call_cost)
 
 
 @external
@@ -248,15 +277,13 @@ def _try_transmit(
     _destination_chain_selector: uint64,
     _message: EVM2AnyMessage,
     _max_fee: uint256,
-    _call_gas: uint256,
     ) -> (bool, bytes32, uint256):
     """
     @notice Best-effort _transmit: a destination the router refuses is reported, not raised
     @dev Anything the router refuses (unsupported chain, paused lane, fee over _max_fee or over
          this contract's balance) returns success=False; misconfiguration on this side still reverts
-    @dev Each router call gets exactly _call_gas or the whole call reverts, so a failure is a
-         refusal, never starvation; _call_gas must cover the call on every target chain
-    @param _call_gas Gas for getFee and for ccipSend, each
+    @dev getFee and ccipSend each get exactly router_call_gas or the whole call reverts, so a
+         failure is a refusal, never starvation; router_call_gas must cover every target chain
     @return (success, message id, fee paid)
     """
     # Only transmit to a registered receiver, and only if the message targets it
@@ -265,15 +292,19 @@ def _try_transmit(
     # Fees are forwarded as msg.value, so only native payment is supported
     assert _message.fee_token == empty(address), "Native fee only"
 
+    call_gas: uint256 = self.router_call_gas
+    # EIP-150 keeps 1/64 back
+    min_gas: uint256 = call_gas * 64 // 63 + self.router_call_cost
+
     # raw_call, not the interface: getFee itself reverts for a chain the router will not serve
     quote_ok: bool = False
     quote: Bytes[32] = b""
-    assert msg.gas > _call_gas * 64 // 63 + ROUTER_CALL_COST, "Not enough gas to transmit"
+    assert msg.gas > min_gas, "Not enough gas to transmit"
     quote_ok, quote = raw_call(
         self.router,
         abi_encode(_destination_chain_selector, _message, method_id=GET_FEE_METHOD_ID),
         max_outsize=32,
-        gas=_call_gas,
+        gas=call_gas,
         is_static_call=True,
         revert_on_failure=False,
     )
@@ -286,12 +317,12 @@ def _try_transmit(
 
     send_ok: bool = False
     sent: Bytes[32] = b""
-    assert msg.gas > _call_gas * 64 // 63 + ROUTER_CALL_COST, "Not enough gas to transmit"
+    assert msg.gas > min_gas, "Not enough gas to transmit"
     send_ok, sent = raw_call(
         self.router,
         abi_encode(_destination_chain_selector, _message, method_id=CCIP_SEND_METHOD_ID),
         max_outsize=32,
-        gas=_call_gas,
+        gas=call_gas,
         value=fee,
         revert_on_failure=False,
     )
