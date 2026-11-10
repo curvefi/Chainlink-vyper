@@ -33,6 +33,13 @@ def test_supports_interface(cre_receiver):
     assert cre_receiver.supportsInterface(bytes.fromhex("deadbeef")) is False
 
 
+def test_supports_interface_answers_under_the_lock(cre_receiver, interface_prober):
+    """A router asks before delivering; an answer the lock reverts would read as no receiver."""
+    prober = interface_prober(bytes.fromhex("805f2132"))  # IReceiver
+    cre_receiver.call_while_locked(prober.address)
+    assert prober.answer() is True
+
+
 def test_interface_limits_match_module():
     """IReceiver.vyi duplicates CREReceiver's size bounds; a vyper module cannot read .vyi
     constants, so the two copies are kept in sync here."""

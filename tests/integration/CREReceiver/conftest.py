@@ -79,6 +79,11 @@ def on_report_non_strict(
     _report: Bytes[CREReceiver.MAX_REPORT_SIZE],
 ):
     CREReceiver._on_report(_metadata, _report, False)
+
+@external
+@nonreentrant
+def call_while_locked(_target: address):
+    raw_call(_target, b"")
 """
 
 

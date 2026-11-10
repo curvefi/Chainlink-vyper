@@ -330,8 +330,10 @@ def _decode_metadata(metadata: Bytes[MAX_METADATA_SIZE]) -> (bytes32, bytes10, a
 #                     EXTERNAL FUNCTIONS                       #
 ################################################################
 
+# Reentrant: the forwarder asks before delivering, and a lock-reverted answer reads as no receiver
 @view
 @external
+@reentrant
 def supportsInterface(interface_id: bytes4) -> bool:
     """
     @dev Interface identification is specified in ERC-165.

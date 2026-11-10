@@ -35,3 +35,36 @@ def forked_env(rpc_url):
             boa.fork(url=rpc_url, block_identifier=block_to_fork, cache_file=None)
         boa.env.enable_fast_mode()
         yield
+
+
+_INTERFACE_PROBER = """
+interface_id: bytes4
+answer: public(bool)
+
+@deploy
+def __init__(_interface_id: bytes4):
+    self.interface_id = _interface_id
+
+@external
+@payable
+def __default__():
+    # asks the caller the way ERC165Checker does: a 30k-gas staticcall
+    ok: bool = False
+    out: Bytes[32] = b""
+    ok, out = raw_call(
+        msg.sender,
+        abi_encode(self.interface_id, method_id=method_id("supportsInterface(bytes4)")),
+        max_outsize=32,
+        gas=30_000,
+        is_static_call=True,
+        revert_on_failure=False,
+    )
+    if ok and len(out) == 32:
+        self.answer = abi_decode(out, bool)
+"""
+
+
+@pytest.fixture()
+def interface_prober():
+    """Deploys a contract that, when called, records whether its caller supports an interface."""
+    return lambda interface_id: boa.loads(_INTERFACE_PROBER, interface_id)

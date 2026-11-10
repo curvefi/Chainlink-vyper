@@ -88,6 +88,13 @@ def test_supports_interface(ccip_module):
     assert ccip_module.supportsInterface(bytes.fromhex("deadbeef")) is False
 
 
+def test_supports_interface_answers_under_the_lock(ccip_module, interface_prober):
+    """A router asks before delivering; an answer the lock reverts would read as no receiver."""
+    prober = interface_prober(bytes.fromhex("85572ffb"))  # CCIPReceiver
+    ccip_module.call_while_locked(prober.address)
+    assert prober.answer() is True
+
+
 def test_build_extra_args(ccip_module):
     """build_extra_args matches Client._argsToBytes: GENERIC_EXTRA_ARGS_V2_TAG ++ abi(gas_limit, true)."""
     extra_args = ccip_module.build_extra_args(CCIP_RECEIVE_GAS_LIMIT)

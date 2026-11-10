@@ -107,6 +107,11 @@ def build_simple_message(
     _extra_args: Bytes[68],
 ) -> CCIP.EVM2AnyMessage:
     return CCIP._build_simple_message(_selector, _data, _extra_args)
+
+@external
+@nonreentrant
+def call_while_locked(_target: address):
+    raw_call(_target, b"")
 """
 
 

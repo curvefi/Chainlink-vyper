@@ -460,7 +460,9 @@ def _ccipReceive(_message: Any2EVMMessage):
 ################################################################
 
 
+# Reentrant: a router asks before delivering, and a lock-reverted answer reads as no receiver
 @view
 @external
+@reentrant
 def supportsInterface(_interface_id: bytes4) -> bool:
     return _interface_id in SUPPORTED_INTERFACES
