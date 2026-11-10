@@ -26,8 +26,12 @@ has not been audited yet and probably contains bugs.
 - Call `CCIP._ccipReceive` / `CREReceiver._on_report` first in your `ccipReceive` /
   `onReport`, before decoding or acting on the payload.
 - `CCIP._transmit` calls the router; enable `# pragma nonreentrancy on` in the consuming
-  contract (and mark only deliberate ETH receivers `@reentrant`) so entry points that
-  reach it cannot be re-entered mid-update.
+  contract so entry points that reach it cannot be re-entered mid-update. Mark only
+  deliberate ETH receivers `@reentrant`, plus any `supportsInterface` you define yourself:
+  routers ask it before delivering, and an answer the lock reverts reads as no receiver.
+- `CCIP._try_transmit` gives each router call `router_call_gas` (500k by default) and
+  reverts if the caller's gas cannot cover it. Export `set_router_call_gas` to retune it
+  without a redeploy; whoever sizes the caller's gas limit must follow the change.
 - The modules authenticate the source only. Payload validity, freshness, replay
   protection and ordering (CCIP out-of-order execution is always on) are the consumer's job.
 - Keep `_on_report`'s default strict mode in production. `strict_mode=False` is for testing
